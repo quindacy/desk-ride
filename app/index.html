@@ -136,8 +136,9 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
 .phmile{left:8px;font-family:var(--mono)}
 .attr{right:8px;text-decoration:none}
 .attr:hover{text-decoration:underline}
-.attr:empty{display:none}
+.attr:empty,.phmile:empty{display:none}
 .mapgrid.scenic{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.mapgrid.scenic #map{max-height:340px}
 .zoomed .st,.zoomed .rt,.zoomed .rd,.zoomed .orl,.zoomed .wp,.zoomed .me,.zoomed .oth{vector-effect:non-scaling-stroke}
 .zoomed .st{stroke-width:1}.zoomed .rt{stroke-width:3}.zoomed .rd{stroke-width:4}
 .zoomed .cty{display:none}
@@ -527,13 +528,13 @@ function preload(r,idx){
 }
 function updatePhoto(r,prog){
   if(PH.route!==r.id){PH.route=r.id;PH.want=PH.shown=null;PH.idx=-1;$('ph0').classList.remove('on');$('ph1').classList.remove('on');$('phAttr').textContent=''}
+  const idx=Math.max(0,Math.min(r.frames.length-1,Math.floor(prog/r.stepMi))),id=r.hold[idx];
+  $('phMile').textContent='Mile '+fmt1(prog)+' of '+fmt1(r.D)+(r.frames[idx]||!PH.shown?'':' · no new photo here');
   if(!mlyToken()){PH.want=null;$('phMsg').textContent=PH_MSG.notoken;return}
   if(PH.err&&Date.now()-PH.errAt>15000)PH.want=null;   // retry after an error
-  const idx=Math.max(0,Math.min(r.frames.length-1,Math.floor(prog/r.stepMi))),id=r.hold[idx];
   if(!id){$('phMsg').textContent='No street photos on this route yet.';return}
   if(id!==PH.want)showFrame(id,prog);
   if(idx!==PH.idx){PH.idx=idx;preload(r,idx)}
-  $('phMile').textContent='Mile '+fmt1(prog)+' of '+fmt1(r.D)+(r.frames[idx]?'':' · no new photo here');
 }
 
 /* ---------- map ---------- */
