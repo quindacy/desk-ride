@@ -1,0 +1,8 @@
+node_modules/
+.env
+*.zip
+.env.*
+!.env.example
+.dev.vars
+*.pem
+*.key

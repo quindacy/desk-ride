@@ -1,0 +1,616 @@
+<title>Desk Ride Journeys</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800;900&family=Overpass+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: road-atlas dashboard — live gauge strip on top, the map as the centerpiece, logbook and family below. Interstate-sign green for the route. */
+:root{
+  --bg:#eef1f0; --panel:#ffffff; --ink:#18221d; --muted:#5d6b64; --line:#d5ddd9;
+  --land:#dfe6e1; --state:#f7f9f8; --route:#b9c6bf;
+  --sign:#0d6b3e; --sign-ink:#ffffff; --done:#0d6b3e;
+  --warn:#b86e00; --warn-bg:#fff3dd; --stop:#b3261e; --stop-bg:#fde7e5; --ok:#1f7a45; --ok-bg:#e3f3e8;
+  --other:#2f5fa8;
+  --display:"Overpass","Arial Narrow",Arial,sans-serif; --mono:"Overpass Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111614; --panel:#1a211e; --ink:#e7eeea; --muted:#94a39b; --line:#2c3732;
+  --land:#232c28; --state:#1e2622; --route:#3d4a44;
+  --sign:#1f8a54; --sign-ink:#ffffff; --done:#3fbf7a;
+  --warn:#f0a73a; --warn-bg:#3a2b10; --stop:#ff8a80; --stop-bg:#3d1a18; --ok:#5fd394; --ok-bg:#16301f;
+  --other:#7aa7ef; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111614; --panel:#1a211e; --ink:#e7eeea; --muted:#94a39b; --line:#2c3732;
+  --land:#232c28; --state:#1e2622; --route:#3d4a44;
+  --sign:#1f8a54; --sign-ink:#ffffff; --done:#3fbf7a;
+  --warn:#f0a73a; --warn-bg:#3a2b10; --stop:#ff8a80; --stop-bg:#3d1a18; --ok:#5fd394; --ok-bg:#16301f;
+  --other:#7aa7ef; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--display);font-size:15px;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;justify-content:space-between}
+h1{margin:0;font-size:28px;font-weight:900;letter-spacing:-.01em;text-wrap:balance}
+h1 span{color:var(--sign)}
+h2{margin:0 0 10px;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.hbtns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,select,input{font:inherit;color:inherit}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--sign);color:var(--sign-ink);border-color:var(--sign)}
+.btn:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--sign);outline-offset:2px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--muted)}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.chip.on i{background:var(--ok)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+/* live strip */
+.live{display:grid;grid-template-columns:minmax(220px,1.1fr) repeat(3,minmax(0,1fr));gap:16px;align-items:stretch}
+.gauge{display:flex;flex-direction:column;gap:6px;justify-content:center}
+.rpm{font-family:var(--mono);font-size:64px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.rpm small{font-family:var(--display);font-size:16px;color:var(--muted);font-weight:700;margin-left:6px}
+.status{align-self:flex-start;font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.06em;padding:4px 10px;border-radius:6px;background:var(--line);color:var(--muted)}
+.status.ok{background:var(--ok-bg);color:var(--ok)}.status.slow{background:var(--warn-bg);color:var(--warn)}.status.stop{background:var(--stop-bg);color:var(--stop)}
+.bar{height:8px;border-radius:4px;background:var(--line);position:relative;overflow:hidden}
+.bar b{position:absolute;inset:0 auto 0 0;background:var(--done);border-radius:4px;transition:width .4s}
+.bar u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink)}
+.stat{display:flex;flex-direction:column;justify-content:center;gap:2px;border-left:1px solid var(--line);padding-left:16px}
+.stat .v{font-family:var(--mono);font-size:30px;font-weight:600;font-variant-numeric:tabular-nums}
+.stat .l{font-size:13px;color:var(--muted);font-weight:600}
+.sim{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);font-size:14px;color:var(--muted)}
+.sim input[type=range]{flex:1;min-width:140px;accent-color:var(--sign)}
+/* map */
+.mapgrid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:16px}
+.map svg{width:100%;height:auto;display:block}
+.st{fill:var(--state);stroke:var(--line);stroke-width:.8}
+.rt{fill:none;stroke:var(--route);stroke-width:4;stroke-linecap:round;stroke-linejoin:round}
+.rd{fill:none;stroke:var(--done);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+.wp{fill:var(--panel);stroke:var(--route);stroke-width:2}
+.wp.done{stroke:var(--done)}
+.wpl{font-size:11px;fill:var(--muted);font-weight:700;paint-order:stroke;stroke:var(--state);stroke-width:3px}
+.me{fill:var(--sign);stroke:#fff;stroke-width:2.5}
+.oth{fill:var(--other);stroke:#fff;stroke-width:2.5}
+.ridl{font-size:12px;font-weight:800;paint-order:stroke;stroke:var(--panel);stroke-width:4px}
+.signs{display:flex;flex-direction:column;gap:12px}
+.hwsign{background:var(--sign);color:var(--sign-ink);border-radius:10px;padding:12px 14px;border:3px solid var(--sign);box-shadow:inset 0 0 0 2px rgba(255,255,255,.85)}
+.hwsign .k{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;opacity:.85}
+.hwsign .t{font-size:21px;font-weight:800;line-height:1.15}
+.hwsign .d{font-family:var(--mono);font-size:15px;margin-top:2px}
+.note{font-size:14px;color:var(--muted)}
+.milemark{display:flex;justify-content:space-between;font-family:var(--mono);font-size:13px;color:var(--muted)}
+[hidden]{display:none!important}
+.planner{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:end;margin-bottom:12px}
+.planner label{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);flex:1;min-width:170px}
+.planner input{padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);font-size:15px;text-transform:none;letter-spacing:0;font-weight:600;color:var(--ink)}
+.planner label.active input{border-color:var(--sign);box-shadow:0 0 0 2px var(--ok-bg)}
+.hint{font-size:14px;color:var(--muted);flex-basis:100%}
+.confirm{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px;padding:10px 12px;border-radius:8px;background:var(--warn-bg);color:var(--warn);margin-bottom:12px}
+.arrived{font-size:15px;font-weight:700;padding:10px 12px;border-radius:8px;background:var(--ok-bg);color:var(--ok);margin-bottom:12px}
+.cty{fill:var(--muted);opacity:.35;cursor:pointer}
+.cty:hover{opacity:1}
+.pick{fill:var(--panel);stroke:var(--sign);stroke-width:3}
+.pv{fill:none;stroke:var(--sign);stroke-width:3;stroke-dasharray:7 6;opacity:.75}
+.orl{fill:none;stroke-width:2.5;stroke-dasharray:4 5;opacity:.6}
+#map{cursor:crosshair}
+.jlist{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px;font-size:14px}
+.jlist li{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.jlist li span:last-child{font-family:var(--mono);color:var(--muted);white-space:nowrap}
+/* lower */
+.lower{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px}
+.totals{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+.totals div{display:flex;flex-direction:column}
+.totals .v{font-family:var(--mono);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+.totals .l{font-size:13px;color:var(--muted);font-weight:600}
+.chart svg{width:100%;height:auto;display:block}
+.chart text{fill:var(--muted);font-size:10px;font-family:var(--mono)}
+.chart .b{fill:var(--done)}.chart .bt{fill:var(--sign);opacity:.55}
+.chart .g{stroke:var(--line);stroke-width:1}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:800;padding:6px 4px;border-bottom:1px solid var(--line)}
+td{padding:8px 4px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:14px}
+td:first-child{font-family:var(--display);font-weight:700}
+tr.me td:first-child::after{content:" (you)";color:var(--muted);font-weight:600}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:-1px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:12px}
+.seg button{border:0;background:transparent;padding:7px 14px;font-weight:700;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--sign);color:var(--sign-ink)}
+details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 20px;margin-top:14px}
+.form label{display:flex;flex-direction:column;gap:4px;font-size:14px;font-weight:700}
+.form label span{font-weight:400;color:var(--muted);font-size:13px}
+.form input[type=number],.form input[type=text],.form select{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+.form input[type=range]{accent-color:var(--sign)}
+.msg{font-size:14px;padding:10px 12px;border-radius:8px;background:var(--warn-bg);color:var(--warn)}
+@media (max-width:860px){.live{grid-template-columns:1fr 1fr}.gauge{grid-column:1/-1}.stat:nth-of-type(2){border-left:0;padding-left:0}.mapgrid,.lower{grid-template-columns:1fr}}
+@media (max-width:420px){.rpm{font-size:52px}.stat .v{font-size:24px}.totals .v{font-size:20px}.wpl{display:none}}
+@media (prefers-reduced-motion:reduce){.bar b{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Desk Ride <span>Journeys</span></h1>
+    <div class="hbtns">
+      <span class="chip" id="conn"><i></i><span id="connTxt">No sensor</span></span>
+      <button class="btn primary" id="btnConnect">Connect sensor</button>
+      <button class="btn" id="btnPause" aria-pressed="false">Pause alerts</button>
+    </div>
+  </header>
+
+  <div class="msg" id="msg" hidden></div>
+
+  <section class="panel" aria-label="Live ride">
+    <div class="live">
+      <div class="gauge">
+        <span class="status" id="status">Waiting</span>
+        <div class="rpm"><span id="rpm">0</span><small>RPM</small></div>
+        <div class="bar" title="Cadence vs target"><b id="rpmBar" style="width:0%"></b><u id="rpmTarget"></u></div>
+        <div class="note" id="targetNote">Target 50 RPM</div>
+      </div>
+      <div class="stat"><span class="v" id="spd">0.0</span><span class="l">mph</span></div>
+      <div class="stat"><span class="v" id="sesMi">0.00</span><span class="l">miles this session</span></div>
+      <div class="stat"><span class="v" id="sesTime">0:00</span><span class="l">pedaling time</span></div>
+    </div>
+    <div class="sim">
+      <label for="simOn" style="display:flex;gap:6px;align-items:center;font-weight:700;color:var(--ink)"><input type="checkbox" id="simOn"> Simulator</label>
+      <input type="range" id="simRpm" min="0" max="100" value="0" aria-label="Simulated RPM" disabled>
+      <span id="simVal" style="font-family:var(--mono);min-width:64px">0 RPM</span>
+    </div>
+  </section>
+
+  <section class="panel map" aria-label="Journey">
+    <div class="confirm" id="confirmBox" hidden><span id="confirmTxt"></span><button class="btn" id="cfYes" type="button">Start new journey</button><button class="btn" id="cfNo" type="button">Keep riding</button></div>
+    <div class="arrived" id="arrived" hidden></div>
+    <div class="planner" id="planner">
+      <label for="pFrom" id="lFrom">Start<input id="pFrom" list="cityList" autocomplete="off" placeholder="Click the map or type a city"></label>
+      <label for="pTo" id="lTo">Destination<input id="pTo" list="cityList" autocomplete="off" placeholder="Click the map or type a city"></label>
+      <button class="btn" id="btnSwap" type="button" title="Swap start and destination">Swap</button>
+      <button class="btn primary" id="btnGo" type="button" disabled>Start journey</button>
+      <div class="hint" id="hint">Click a city on the map for your start, then click your destination.</div>
+    </div>
+    <datalist id="cityList"></datalist>
+    <div class="mapgrid">
+      <div>
+        <h2 id="jTitle">Plan a journey</h2>
+        <svg id="map" role="img" aria-label="Map of the United States with your journey"></svg>
+        <div class="milemark"><span id="mmLeft">Mile 0</span><span id="mmPct"></span><span id="mmTot"></span></div>
+        <div class="bar" style="margin-top:6px"><b id="tripBar" style="width:0%"></b></div>
+      </div>
+      <div class="signs">
+        <div class="hwsign"><div class="k">You are near</div><div class="t" id="nearTxt">—</div><div class="d" id="nearNote"></div></div>
+        <div class="hwsign"><div class="k">Next stop</div><div class="t" id="nextTxt">—</div><div class="d" id="nextMi"></div></div>
+        <div class="hwsign"><div class="k">Destination</div><div class="t" id="destTxt">—</div><div class="d" id="destMi"></div></div>
+        <div class="note" id="eta"></div>
+        <button class="btn" id="btnNew" type="button" hidden>New journey</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="lower">
+    <section class="panel chart" aria-label="Logbook">
+      <h2>Logbook</h2>
+      <div class="totals">
+        <div><span class="v" id="tToday">0.0</span><span class="l">miles today</span></div>
+        <div><span class="v" id="tWeek">0.0</span><span class="l">miles this week</span></div>
+        <div><span class="v" id="tAll">0</span><span class="l">miles all time</span></div>
+      </div>
+      <svg id="chart" viewBox="0 0 520 170" role="img" aria-label="Miles per day, last 14 days"></svg>
+      <div class="note" id="minNote"></div>
+      <h2 style="margin-top:16px" id="jDoneH" hidden>Completed journeys</h2>
+      <ul class="jlist" id="jDone"></ul>
+    </section>
+
+    <section class="panel" aria-label="Family">
+      <h2>Family ride</h2>
+      <div class="seg" role="group" aria-label="Sharing">
+        <button id="modeSep" aria-pressed="true">Keep separate</button>
+        <button id="modeTog" aria-pressed="false">Ride together</button>
+      </div>
+      <div class="note" id="famNote">Your stats stay private. Switch to Ride together to share your miles and see everyone on the map.</div>
+      <table id="famTable" hidden>
+        <thead><tr><th>Rider</th><th>Today</th><th>Week</th><th>Total</th></tr></thead>
+        <tbody id="famBody"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <section class="panel">
+    <details class="settings" id="settingsBox">
+      <summary>Settings</summary>
+      <div class="form">
+        <label for="sTarget">Target cadence (RPM)<span>Alert when you drop below this.</span><input type="number" id="sTarget" min="10" max="120" step="1"></label>
+        <label for="sGrace">Grace period (seconds)<span>How long you can be slow before it chimes.</span><input type="number" id="sGrace" min="3" max="120" step="1"></label>
+        <label for="sFt">Distance per pedal turn (feet)<span>Sets your virtual gear. 20 ft is a medium road-bike gear.</span><input type="number" id="sFt" min="5" max="40" step="0.5"></label>
+        <label for="sAway">Auto-pause after stopped (minutes)<span>Stops nagging when you've stepped away.</span><input type="number" id="sAway" min="1" max="60" step="1"></label>
+        <label for="sSound">Alert sound<select id="sSound"><option value="chime">Chime</option><option value="beep">Beep</option><option value="block">Woodblock</option></select></label>
+        <label for="sVol">Volume<input type="range" id="sVol" min="0" max="1" step="0.05"></label>
+        <label for="sNick">Your name on the leaderboard<input type="text" id="sNick" maxlength="24" placeholder="e.g. Dad"></label>
+        <label>Test sounds<span style="display:flex;gap:8px;margin-top:2px"><button class="btn" id="tSlow" type="button">Slowing down</button><button class="btn" id="tStop" type="button">Stopped</button></span></label>
+      </div>
+    </details>
+  </section>
+</div>
+
+<script>
+const MAP = {"W":960,"H":603,"states":{"Alabama":"M649.5,378.6L681.7,375.8L694.9,423.2L700.3,432.7L699.8,435.0L702.1,436.1L699.2,439.4L699.6,442.2L698.4,446.3L701.1,452.9L700.4,459.0L703.2,464.9L653.1,470.2L652.7,473.2L657.5,477.2L657.1,481.0L658.7,482.7L656.1,486.3L653.5,487.3L648.3,484.0L647.3,478.5L645.8,478.0L644.0,486.5L638.9,485.8L634.6,451.2L636.1,382.3L634.0,380.1L649.5,378.6Z","Arizona":"M256.5,324.0L238.7,452.5L199.9,446.7L134.0,407.9L136.7,403.2L140.5,403.1L142.0,401.3L141.8,396.9L139.2,396.3L139.7,387.7L144.1,385.3L145.6,376.6L148.5,373.1L151.7,372.2L154.5,369.7L151.5,365.8L150.2,359.4L148.0,355.1L150.2,349.4L150.0,340.5L151.6,327.1L158.3,327.6L159.9,330.7L161.7,330.9L164.3,327.5L167.8,309.3L256.5,324.0Z","Arkansas":"M517.8,351.2L596.0,348.3L597.8,352.6L592.6,360.0L604.3,359.3L604.0,363.6L601.4,365.0L601.0,368.5L597.8,372.5L598.5,378.0L596.9,382.1L595.1,382.9L596.4,384.8L593.5,386.7L592.5,390.7L590.6,391.8L591.1,396.3L587.9,397.7L588.0,399.2L584.4,403.2L585.6,405.6L582.5,409.5L579.8,416.6L583.3,419.4L581.7,421.4L583.0,426.1L581.7,429.3L527.3,430.9L527.0,418.7L524.3,417.8L520.7,419.0L518.7,416.9L519.0,376.6L515.2,351.3L517.8,351.2Z","California":"M39.9,160.3L92.0,175.0L74.9,241.4L148.5,352.3L148.0,355.1L150.2,359.4L151.5,365.8L154.5,369.7L151.7,372.2L148.5,373.1L145.6,376.6L144.1,385.3L139.7,387.7L139.2,396.3L141.8,396.9L142.0,401.3L140.5,403.1L91.1,397.7L89.5,394.3L90.5,389.6L90.3,383.8L88.6,379.3L84.1,372.6L78.0,365.9L76.3,366.9L73.7,365.4L74.6,363.3L72.5,358.0L68.0,357.9L61.2,352.8L60.8,349.8L56.6,345.3L50.8,343.9L46.5,341.3L40.3,340.3L37.9,336.6L40.3,330.6L39.5,329.3L41.3,325.1L37.5,320.6L38.5,316.1L36.8,315.3L35.0,310.7L33.2,309.3L33.0,306.6L28.7,295.7L26.3,292.1L27.6,284.8L28.8,285.8L31.2,281.9L29.8,277.3L26.6,277.0L23.7,272.3L23.0,269.2L24.1,266.6L23.1,262.5L24.8,256.7L28.0,257.6L29.0,249.2L27.3,249.6L25.9,253.5L22.3,253.4L19.1,249.2L20.0,243.8L18.6,239.0L15.9,235.4L11.7,224.8L13.0,223.4L12.9,215.4L15.1,211.6L15.5,205.0L13.1,197.7L10.0,193.1L10.4,188.9L17.5,180.5L19.3,177.5L19.2,174.8L22.7,168.6L23.3,162.2L21.9,160.3L24.1,155.7L39.9,160.3Z","Colorado":"M288.0,235.5L325.0,239.9L387.3,244.9L381.7,336.7L295.3,329.0L256.5,324.0L269.0,233.1L288.0,235.5Z","Connecticut":"M871.0,178.3L891.5,173.5L895.0,187.0L894.5,189.3L886.2,192.9L877.6,194.5L874.6,198.5L870.9,200.4L866.8,204.1L865.0,201.8L868.5,198.4L866.9,196.9L863.9,179.8L871.0,178.3Z","Delaware":"M843.5,237.3L841.1,242.2L842.2,245.7L845.4,248.4L847.3,253.8L852.2,258.8L854.0,258.6L856.5,266.2L845.3,268.4L837.6,240.5L839.9,237.4L843.5,237.3Z","District of Columbia":"M819.7,261.3L822.3,263.1L820.6,265.9L818.6,262.9L819.7,261.3Z","Florida":"M693.7,466.1L703.2,464.9L706.6,471.2L758.3,467.7L760.0,472.3L762.3,471.9L762.5,467.2L761.1,463.1L762.6,461.1L767.4,462.3L772.8,462.3L779.6,482.5L787.5,496.0L798.7,509.9L797.6,511.2L799.2,518.2L804.2,525.6L814.8,545.4L816.4,569.3L814.6,569.9L813.5,576.0L814.5,577.7L811.2,582.5L809.5,581.8L806.0,584.1L799.6,586.1L797.3,584.1L797.7,580.6L791.5,571.4L787.7,570.1L784.8,572.0L781.5,566.8L780.1,562.4L775.2,558.0L773.7,554.9L773.6,550.0L771.2,549.5L772.2,552.2L770.2,553.3L762.0,542.1L759.0,539.4L763.8,529.6L759.9,530.6L757.7,533.8L754.5,529.8L756.2,517.0L755.4,506.7L752.7,504.6L751.5,501.4L747.6,501.1L742.5,496.3L738.6,494.6L738.0,491.3L735.3,490.4L732.8,486.9L724.7,482.9L718.3,484.9L719.1,488.3L716.9,487.9L709.2,493.1L700.6,495.1L700.6,492.6L698.2,489.9L687.3,484.3L679.8,482.2L673.2,482.1L656.1,486.3L658.7,482.7L657.1,481.0L657.5,477.2L652.7,473.2L653.1,470.2L693.7,466.1Z","Georgia":"M727.4,369.8L724.1,375.1L724.1,377.6L730.9,381.6L732.8,380.9L740.9,392.3L745.6,394.6L748.6,398.4L754.2,401.5L754.4,404.2L758.3,407.9L763.8,410.6L765.6,414.1L766.6,418.9L769.4,420.1L773.4,425.7L774.1,429.5L778.7,430.8L775.3,439.2L775.1,443.3L773.6,447.0L774.0,450.7L772.1,452.6L772.8,462.3L767.4,462.3L762.6,461.1L761.1,463.1L762.5,467.2L762.3,471.9L760.0,472.3L758.3,467.7L706.6,471.2L703.2,464.9L700.4,459.0L701.1,452.9L698.4,446.3L699.6,442.2L699.2,439.4L702.1,436.1L699.8,435.0L700.3,432.7L694.9,423.2L681.7,375.8L727.4,369.8Z","Idaho":"M189.9,34.7L185.0,57.2L188.6,64.4L187.4,70.5L189.7,73.7L192.6,75.3L192.6,77.0L197.1,84.1L197.3,86.7L200.8,89.8L200.7,91.3L205.2,92.0L199.9,105.0L200.9,108.8L197.6,110.6L198.2,113.2L197.0,115.5L199.9,118.4L204.3,116.1L206.3,114.0L208.7,116.7L207.9,118.5L208.7,123.1L210.4,128.1L212.0,130.0L211.1,134.3L212.6,136.5L215.8,137.3L216.6,144.9L218.2,146.5L220.3,144.7L225.2,145.7L229.2,144.4L231.2,145.8L235.1,145.5L235.7,146.9L239.1,146.5L243.5,142.5L245.4,146.8L247.9,149.6L239.0,205.5L189.5,196.9L140.5,186.5L149.7,145.8L153.4,138.9L152.5,136.8L149.6,135.7L149.2,132.4L154.1,125.3L155.9,124.9L158.3,122.0L158.5,119.8L167.4,108.0L166.8,104.7L163.5,102.3L162.2,98.1L163.0,94.2L161.8,89.9L175.3,31.5L189.9,34.7Z","Illinois":"M579.4,211.2L626.5,208.2L626.3,212.6L632.7,225.7L637.5,279.6L635.9,283.9L638.5,288.5L639.2,292.5L634.2,304.2L632.2,304.7L633.0,307.6L631.7,308.8L631.1,314.3L631.8,315.7L629.7,319.2L631.7,323.1L624.6,325.8L624.1,328.2L626.0,331.1L623.9,333.2L617.1,330.2L615.0,330.6L612.6,334.8L613.5,336.0L610.7,335.9L606.2,329.7L607.6,328.1L605.8,323.8L605.6,320.3L599.5,315.8L597.6,316.4L595.5,313.5L589.9,309.2L589.8,305.5L592.5,299.5L591.8,297.4L593.4,294.5L586.9,292.2L585.0,294.5L583.6,293.2L582.1,285.7L570.4,275.5L567.9,268.6L567.5,264.0L568.8,260.6L568.9,256.5L573.5,253.7L573.8,250.2L575.9,247.8L576.0,243.8L573.0,240.7L573.9,236.6L580.4,235.1L585.5,231.9L585.9,228.4L588.0,226.8L587.7,219.5L583.9,217.5L583.3,215.1L579.4,211.2Z","Indiana":"M658.3,222.0L678.1,219.8L685.1,280.3L683.8,281.5L686.0,287.5L683.0,288.0L680.0,290.5L675.4,290.0L676.1,294.5L673.3,296.7L672.5,299.7L669.5,301.2L668.5,307.1L666.6,308.8L662.4,307.1L661.5,304.5L657.9,307.8L658.4,310.3L654.6,311.5L653.2,309.4L649.0,312.1L647.7,314.6L643.0,311.6L640.7,312.6L639.0,311.1L637.7,312.8L633.3,313.5L631.8,315.7L631.1,314.3L631.7,308.8L633.0,307.6L632.2,304.7L634.2,304.2L639.2,292.5L638.5,288.5L635.9,283.9L637.5,279.6L632.7,225.7L634.5,227.0L639.7,226.5L644.4,223.4L658.3,222.0Z","Iowa":"M566.2,189.2L568.7,189.1L569.0,192.5L571.6,194.6L569.7,197.4L572.0,206.1L578.0,208.4L579.4,211.2L583.3,215.1L583.9,217.5L587.7,219.5L588.4,222.4L588.0,226.8L585.9,228.4L585.5,231.9L580.4,235.1L573.9,236.6L573.0,240.7L576.0,243.8L575.9,247.8L573.8,250.2L573.5,253.7L568.9,256.5L568.8,260.6L566.9,260.0L563.2,255.5L537.1,257.2L494.2,257.7L492.2,254.7L493.2,248.8L491.5,243.7L491.6,237.9L488.6,235.9L488.2,232.8L489.2,230.0L488.1,226.0L485.8,224.5L482.8,214.2L479.7,209.2L481.8,201.3L483.0,199.7L481.0,197.4L481.5,193.4L480.7,191.5L566.2,189.2Z","Kansas":"M388.4,268.0L502.2,271.1L503.9,273.3L509.5,275.0L505.7,281.7L507.9,283.9L510.7,289.3L514.5,290.3L515.1,339.9L416.8,338.5L381.7,336.7L385.9,267.9L388.4,268.0Z","Kentucky":"M701.9,286.0L706.2,288.6L708.7,286.6L715.6,287.4L717.2,284.9L719.5,283.9L720.8,287.6L722.9,287.9L725.8,290.7L726.2,297.6L729.0,301.7L732.3,304.6L733.5,307.1L737.3,309.2L739.6,309.3L733.8,316.4L727.7,320.6L728.0,322.4L725.5,324.3L725.6,326.3L722.3,327.6L721.5,330.3L712.1,335.2L637.2,342.1L633.2,341.5L633.8,345.6L609.2,347.5L610.0,344.5L612.7,345.3L613.5,336.0L612.6,334.8L615.0,330.6L617.1,330.2L623.9,333.2L626.0,331.1L624.1,328.2L624.6,325.8L631.7,323.1L629.7,319.2L633.3,313.5L637.7,312.8L639.0,311.1L640.7,312.6L643.0,311.6L647.7,314.6L649.0,312.1L653.2,309.4L654.6,311.5L658.4,310.3L657.9,307.8L661.5,304.5L662.4,307.1L666.6,308.8L668.5,307.1L669.5,301.2L672.5,299.7L673.3,296.7L676.1,294.5L675.4,290.0L680.0,290.5L683.0,288.0L686.0,287.5L683.8,281.5L685.1,280.3L691.7,279.5L695.8,283.8L696.3,285.8L701.9,286.0Z","Louisiana":"M535.5,430.7L581.7,429.3L583.6,431.8L582.3,432.9L582.3,437.6L585.3,440.3L586.1,447.0L584.0,452.4L579.7,455.8L578.8,461.0L576.9,460.6L576.9,469.0L574.6,469.3L576.2,473.8L574.9,475.5L611.5,473.4L610.1,481.0L613.6,485.8L614.6,489.5L617.2,491.7L611.6,495.2L611.3,497.4L616.1,498.6L617.9,494.9L622.2,498.2L622.1,501.1L619.8,502.5L615.3,501.6L616.0,503.7L614.7,507.1L618.7,509.7L624.8,510.1L627.2,513.3L629.0,513.7L626.1,517.7L622.6,517.2L619.4,513.5L612.0,511.8L611.8,508.0L608.3,509.5L608.7,512.7L607.2,515.8L604.7,516.4L602.5,513.2L598.0,513.3L596.5,516.9L593.5,518.1L590.2,516.1L587.5,516.0L584.8,510.5L580.2,508.3L578.5,508.7L576.5,504.1L571.4,504.9L571.2,502.1L566.2,505.0L566.9,507.1L563.1,509.3L557.0,508.5L544.9,504.4L534.2,505.8L532.9,506.7L531.1,504.5L535.5,496.3L533.9,492.0L535.3,489.6L534.5,486.5L536.4,484.1L538.3,478.2L537.8,473.3L532.3,464.2L532.1,459.2L527.8,454.3L527.3,430.9L535.5,430.7Z","Maine":"M903.0,146.0L900.6,144.9L900.3,142.7L897.1,140.8L883.7,98.1L889.5,93.3L888.0,92.1L889.6,88.0L891.8,85.7L890.9,84.6L892.8,81.9L891.0,78.2L890.9,72.1L892.7,69.5L891.9,63.2L898.7,43.2L901.6,43.1L902.9,47.1L905.3,48.0L909.4,44.2L912.4,43.3L914.0,41.1L922.5,45.4L931.6,75.6L937.3,75.5L937.3,78.3L939.4,80.2L939.0,82.7L942.2,85.4L944.8,83.8L950.0,90.6L947.9,95.1L945.6,94.3L944.8,97.2L942.5,97.3L942.8,99.4L939.9,100.0L936.7,106.1L934.6,103.2L933.0,103.4L934.8,106.7L931.7,109.4L930.0,106.9L928.8,108.9L924.8,110.0L923.7,106.8L921.5,108.2L922.6,110.4L921.8,115.8L922.6,117.0L920.5,120.5L917.3,120.4L916.4,123.7L914.1,124.7L912.7,127.5L910.2,127.7L908.8,125.5L906.3,130.4L908.0,132.5L905.6,134.1L906.0,136.2L903.7,139.5L903.0,146.0Z","Maryland":"M774.9,252.8L837.6,240.5L845.3,268.4L856.5,266.2L855.2,276.4L844.7,281.5L844.0,277.8L842.2,276.7L843.9,274.6L840.4,271.5L839.9,273.3L836.2,273.7L834.2,269.9L835.3,269.6L834.3,264.3L835.0,262.0L832.0,255.2L832.9,250.6L835.7,249.3L835.2,244.9L833.2,245.8L833.6,248.0L829.7,251.8L828.9,254.7L830.0,261.3L828.9,264.7L830.8,269.7L833.8,272.8L834.1,275.5L836.1,278.0L835.7,280.0L831.0,277.2L824.9,276.7L822.5,273.6L819.7,276.2L817.9,273.7L822.3,263.1L819.7,261.3L818.6,262.9L815.9,261.3L812.1,260.9L811.5,257.6L809.2,256.1L806.5,256.2L803.4,250.3L800.5,250.9L797.2,249.3L795.9,251.4L793.1,251.8L792.9,254.4L787.6,253.7L784.8,257.6L782.4,257.3L779.7,261.7L776.7,264.4L774.9,252.8Z","Massachusetts":"M900.6,150.6L902.3,150.6L903.9,154.3L904.1,157.6L902.3,161.2L903.1,164.6L906.8,164.1L909.9,167.0L910.3,169.9L912.2,170.2L913.1,172.7L918.3,173.6L922.9,170.1L922.6,173.4L915.6,178.2L912.8,179.1L910.5,177.5L908.0,178.9L908.4,180.4L905.6,182.2L903.3,178.6L900.5,176.8L898.2,171.9L863.9,179.8L863.3,179.0L863.7,163.5L895.7,156.5L896.9,154.0L900.6,150.6Z","Michigan":"M700.8,217.6L678.3,221.3L678.1,219.8L644.4,223.4L647.5,220.1L651.0,211.4L652.4,200.6L651.3,193.9L645.2,181.2L646.2,176.1L644.5,170.2L647.6,163.8L647.9,158.6L647.1,155.9L649.6,154.5L649.5,150.8L653.5,149.4L656.2,144.9L656.9,153.1L658.6,153.3L660.2,149.0L659.5,142.1L660.7,140.2L664.9,138.6L662.9,133.9L665.3,129.5L668.8,128.8L673.1,130.9L677.0,130.8L679.3,133.8L682.3,133.7L687.6,136.0L689.3,135.7L692.7,140.1L690.8,143.0L693.4,146.0L694.7,149.8L694.9,158.3L691.9,160.8L691.6,165.3L688.0,167.3L686.5,172.8L687.5,174.6L691.7,176.0L694.3,172.7L697.1,166.4L702.4,163.5L705.4,164.8L707.5,167.8L711.4,181.6L714.1,187.1L713.5,195.5L711.0,197.1L710.5,194.1L708.8,195.3L707.7,202.4L704.7,205.4L704.4,210.8L700.8,215.7L700.8,217.6ZM656.4,131.1L657.0,133.8L654.9,134.5L655.4,130.6L656.4,131.1ZM624.8,148.8L622.1,146.7L623.3,143.3L619.6,143.1L620.8,139.9L620.6,135.9L615.0,130.8L608.1,129.1L606.1,130.0L599.1,127.2L582.6,123.7L580.7,119.9L577.7,118.7L583.6,116.0L586.2,113.1L592.9,111.6L597.1,107.9L599.1,107.6L607.5,98.4L611.0,96.3L614.6,97.6L607.8,107.5L608.2,111.7L610.9,108.2L616.3,108.2L620.7,110.1L625.0,115.9L627.1,116.9L631.0,115.5L632.1,116.8L636.1,117.1L643.9,111.1L654.0,109.8L657.7,107.6L660.7,107.2L662.0,113.4L665.2,113.9L668.2,112.5L669.6,113.8L671.4,111.7L675.9,110.6L677.0,118.4L679.4,121.5L682.6,122.0L682.7,119.7L685.7,119.3L687.6,121.4L686.5,123.4L677.7,123.0L673.7,124.5L668.9,122.3L667.9,124.9L668.8,127.0L666.7,126.7L663.4,124.0L655.6,122.8L653.4,126.1L649.3,127.3L644.8,127.1L643.1,128.5L642.9,131.1L638.2,133.7L638.2,130.7L636.0,130.3L635.4,133.4L631.8,133.9L630.3,135.4L624.8,148.8ZM600.5,85.3L596.8,88.5L594.8,89.0L594.8,86.6L604.0,80.6L602.5,84.4L600.5,85.3Z","Minnesota":"M552.5,116.9L551.3,116.0L548.2,117.9L548.7,131.3L547.8,132.7L543.4,134.8L539.9,139.7L539.7,143.0L541.6,143.2L543.7,146.0L542.0,149.5L542.5,153.4L541.6,161.7L546.0,165.7L549.4,166.0L551.1,168.4L556.2,170.7L557.1,173.6L561.9,177.3L564.5,178.0L567.9,182.9L567.6,186.5L568.7,189.1L482.8,191.1L483.0,150.1L479.4,147.5L476.6,143.1L481.0,138.3L480.8,126.6L478.9,124.2L477.7,119.3L477.0,97.7L472.9,85.7L472.5,76.6L473.6,73.5L471.7,66.4L503.0,66.4L502.9,57.8L505.9,58.0L507.9,59.7L510.0,71.4L511.6,72.7L516.6,73.0L517.2,74.1L523.0,74.5L523.7,76.9L528.7,76.2L528.7,75.2L532.6,73.8L536.0,74.2L540.0,76.0L541.1,78.3L543.4,77.9L545.6,82.9L546.6,80.8L550.4,79.6L551.1,81.7L555.7,83.0L555.8,84.9L558.1,86.4L562.7,85.4L565.3,83.0L569.0,81.4L570.6,84.7L579.8,83.7L584.1,86.2L588.0,85.5L587.7,86.7L582.8,89.9L571.3,95.2L558.0,109.3L551.2,115.1L552.5,116.9Z","Mississippi":"M629.0,380.5L634.0,380.1L636.1,382.3L634.6,451.2L638.9,485.8L636.8,487.0L632.1,486.8L630.0,485.5L625.4,486.8L617.2,491.7L614.6,489.5L613.6,485.8L610.1,481.0L611.5,473.4L574.9,475.5L576.2,473.8L574.6,469.3L576.9,469.0L576.9,460.6L578.8,461.0L579.7,455.8L584.0,452.4L586.1,447.0L585.3,440.3L582.3,437.6L582.3,432.9L583.6,431.8L581.7,429.3L583.0,426.1L581.7,421.4L583.3,419.4L579.8,416.6L582.5,409.5L585.6,405.6L584.4,403.2L588.0,399.2L587.9,397.7L591.1,396.3L590.6,391.8L592.5,390.7L593.5,386.7L596.4,384.8L595.1,382.9L629.0,380.5Z","Missouri":"M561.4,255.7L563.2,255.5L566.9,260.0L568.8,260.6L567.5,264.0L567.9,268.6L570.4,275.5L582.1,285.7L583.6,293.2L585.0,294.5L586.9,292.2L593.4,294.5L591.8,297.4L592.5,299.5L589.8,305.5L589.9,309.2L595.5,313.5L597.6,316.4L599.5,315.8L605.6,320.3L605.8,323.8L607.6,328.1L606.2,329.7L610.7,335.9L613.5,336.0L612.7,345.3L610.0,344.5L609.2,347.5L607.0,347.6L607.5,353.3L604.3,359.3L592.6,360.0L597.8,352.6L596.0,348.3L515.2,351.3L514.5,290.3L510.7,289.3L507.9,283.9L505.7,281.7L509.5,275.0L503.9,273.3L497.9,265.1L494.2,257.7L513.6,258.0L561.4,255.7Z","Montana":"M368.9,61.3L361.3,151.5L281.0,142.5L249.7,137.8L247.9,149.6L245.4,146.8L243.5,142.5L239.1,146.5L235.7,146.9L235.1,145.5L231.2,145.8L229.2,144.4L225.2,145.7L220.3,144.7L218.2,146.5L216.6,144.9L215.8,137.3L212.6,136.5L211.1,134.3L212.0,130.0L210.4,128.1L207.9,118.5L208.7,116.7L206.3,114.0L204.3,116.1L199.9,118.4L197.0,115.5L198.2,113.2L197.6,110.6L200.9,108.8L199.9,105.0L205.2,92.0L200.7,91.3L200.8,89.8L197.3,86.7L197.1,84.1L192.6,77.0L192.6,75.3L189.7,73.7L187.4,70.5L188.6,64.4L185.0,57.2L189.9,34.7L257.2,47.6L287.8,52.1L368.9,61.3Z","Nebraska":"M369.3,197.8L448.9,202.0L449.4,203.2L457.9,207.5L459.9,205.3L470.0,206.0L478.7,210.3L479.8,213.6L482.8,214.2L485.8,224.5L488.1,226.0L489.2,230.0L488.2,232.8L488.6,235.9L491.6,237.9L491.5,243.7L493.2,248.8L492.2,254.7L502.2,271.1L385.9,267.9L387.3,244.9L353.4,242.4L357.3,196.8L369.3,197.8Z","Nevada":"M140.5,186.5L189.5,196.9L164.3,327.5L161.7,330.9L159.9,330.7L158.3,327.6L151.6,327.1L150.0,340.5L150.2,349.4L148.5,352.3L74.9,241.4L92.0,175.0L140.5,186.5Z","New Hampshire":"M883.7,98.1L897.1,140.8L900.3,142.7L900.6,144.9L903.0,146.0L902.3,150.6L900.6,150.6L896.9,154.0L895.7,156.5L876.8,160.6L875.0,159.2L874.3,155.9L875.4,154.4L874.5,151.2L873.3,141.6L876.0,129.0L874.5,123.6L879.2,120.2L880.8,115.8L878.4,112.6L879.6,108.4L878.9,106.3L879.6,100.0L883.3,99.7L883.7,98.1Z","New Jersey":"M856.4,203.0L862.7,204.8L862.2,211.8L859.8,213.9L859.1,217.7L864.1,218.3L865.1,220.8L865.9,233.2L862.7,243.4L859.8,246.8L858.0,253.1L855.6,249.8L850.3,249.0L843.1,245.5L841.8,241.8L842.5,240.3L843.5,237.3L847.6,234.4L847.5,232.7L851.8,227.8L852.2,225.7L846.4,222.2L845.6,219.5L843.3,219.2L842.6,216.7L844.3,212.2L842.4,210.1L845.5,204.6L845.9,201.9L847.7,199.8L856.4,203.0Z","New Mexico":"M285.4,327.7L364.5,335.4L354.8,449.5L287.0,443.2L286.3,445.4L288.2,448.2L256.1,444.4L254.8,454.6L238.7,452.5L256.5,324.0L285.4,327.7Z","New York":"M850.2,113.5L851.7,122.4L854.1,126.0L854.7,130.4L854.0,135.3L856.8,141.1L856.4,143.1L859.8,146.1L863.7,163.5L863.3,179.0L866.9,196.9L868.5,198.4L865.0,201.8L866.8,204.1L874.3,204.2L875.4,202.5L884.4,199.5L888.5,194.7L889.5,197.2L892.4,197.6L887.2,202.4L875.6,210.5L866.9,213.4L864.5,215.1L862.2,211.8L862.7,204.8L847.7,199.8L846.6,198.4L844.0,198.8L840.2,195.7L839.8,192.3L837.3,190.2L836.0,190.6L833.6,187.9L761.1,202.2L760.1,196.1L769.0,187.9L770.1,184.6L772.9,181.9L771.0,178.3L769.5,177.8L767.4,171.8L776.4,167.5L788.3,166.0L792.4,167.8L794.5,166.3L801.5,165.0L805.5,162.6L809.1,157.6L812.0,156.9L810.8,150.7L811.5,146.9L807.4,145.2L807.6,142.2L813.2,137.1L820.8,124.2L827.0,118.8L837.8,117.0L850.2,113.5Z","North Carolina":"M760.6,328.7L786.9,324.8L851.5,311.9L855.5,320.5L850.3,320.7L849.9,321.9L844.1,324.5L843.5,326.0L839.6,327.2L840.1,328.7L850.8,325.2L853.0,326.9L856.0,325.3L858.3,330.5L857.8,333.3L855.7,334.0L852.4,340.5L846.4,342.0L846.2,346.0L849.6,349.3L851.8,349.6L849.3,356.7L845.8,356.6L836.5,360.6L831.1,366.1L827.2,372.8L825.9,380.4L821.8,379.5L815.4,382.3L790.8,364.5L770.2,367.6L770.1,364.9L766.7,361.5L765.0,363.2L764.5,360.9L741.9,363.2L727.4,369.8L705.3,372.9L705.1,367.5L708.6,366.5L709.6,362.6L713.6,358.7L718.6,357.9L722.6,353.8L727.1,351.9L730.3,346.3L732.6,344.5L733.4,346.6L739.9,341.2L743.2,341.6L744.9,337.1L748.1,335.5L748.0,330.0L760.6,328.7Z","North Dakota":"M471.7,66.4L473.6,73.5L472.5,76.6L472.9,85.7L477.0,97.7L477.7,119.3L478.9,124.2L480.8,126.6L481.3,135.7L363.1,130.1L368.9,61.3L471.7,66.4Z","Ohio":"M748.7,204.8L753.7,235.1L751.4,236.8L753.0,239.0L753.5,242.5L752.0,248.4L751.8,256.9L746.3,265.3L744.3,266.6L742.2,265.4L740.7,269.0L738.7,269.1L737.2,273.8L738.0,276.4L736.6,278.7L733.5,275.6L731.1,281.6L732.4,284.9L730.5,286.5L730.3,289.6L725.8,290.7L722.9,287.9L720.8,287.6L719.5,283.9L717.2,284.9L715.6,287.4L708.7,286.6L706.2,288.6L701.9,286.0L696.3,285.8L695.8,283.8L691.7,279.5L685.1,280.3L678.3,221.3L700.8,217.6L710.1,221.4L711.5,219.4L718.1,223.3L725.5,219.2L730.2,219.1L734.5,214.2L741.0,208.9L748.7,204.8Z","Oklahoma":"M416.8,338.5L515.1,339.9L515.2,351.3L519.0,376.6L518.7,416.9L511.4,414.5L509.6,411.9L504.7,409.7L503.5,411.7L498.7,411.6L497.7,410.3L493.3,412.6L491.4,411.3L487.4,412.5L483.7,416.0L482.3,414.0L478.4,412.3L474.3,412.3L473.0,409.6L468.2,414.7L466.7,411.8L464.5,412.7L462.9,410.8L458.5,408.9L455.2,411.9L453.8,408.7L451.2,408.3L449.7,405.7L446.1,404.6L443.7,406.7L442.3,404.8L438.6,404.9L434.5,402.8L430.8,402.9L429.6,398.5L423.7,398.0L421.4,398.7L417.4,394.2L416.0,394.4L417.9,349.9L363.7,346.8L364.5,335.4L416.8,338.5Z","Oregon":"M67.1,69.3L68.5,69.4L71.1,72.6L71.8,75.7L70.6,82.5L77.8,87.1L85.5,85.5L89.8,86.3L94.3,88.9L94.4,90.4L103.7,89.6L105.4,91.2L110.1,91.8L114.4,90.6L121.6,90.4L127.9,91.4L130.4,90.5L162.2,98.1L163.5,102.3L166.8,104.7L167.4,108.0L158.5,119.8L158.3,122.0L155.9,124.9L154.1,125.3L149.2,132.4L149.6,135.7L152.5,136.8L153.4,138.9L149.7,145.8L140.5,186.5L75.2,170.5L24.1,155.7L22.6,152.5L23.5,145.0L25.3,140.2L24.3,135.7L36.9,116.4L44.7,95.8L48.7,88.2L52.7,77.2L53.7,70.7L55.6,67.3L62.6,65.9L64.5,69.1L67.1,69.3Z","Pennsylvania":"M760.1,196.5L761.1,202.2L833.6,187.9L836.0,190.6L837.3,190.2L839.8,192.3L840.2,195.7L844.0,198.8L846.6,198.4L847.7,199.8L845.9,201.9L845.5,204.6L842.4,210.1L844.3,212.2L842.6,216.7L843.3,219.2L845.6,219.5L846.4,222.2L852.2,225.7L851.8,227.8L847.5,232.7L847.6,234.4L843.5,237.3L839.9,237.4L837.6,240.5L757.1,255.8L748.7,204.8L760.1,196.5Z","Rhode Island":"M903.3,178.6L905.6,182.2L902.5,183.6L903.3,178.6ZM895.8,172.5L898.2,171.9L900.5,176.8L902.6,178.0L900.6,178.1L899.7,181.8L900.4,186.6L894.5,189.3L895.0,187.0L891.6,173.9L895.8,172.5Z","South Carolina":"M733.5,367.4L737.1,364.7L741.9,363.2L764.5,360.9L765.0,363.2L766.7,361.5L770.1,364.9L770.2,367.6L790.8,364.5L815.4,382.3L812.4,384.0L809.0,388.4L806.1,394.9L806.2,399.7L803.7,404.0L799.5,404.7L799.1,407.6L795.2,411.3L793.3,415.0L789.6,417.0L786.0,421.1L785.8,422.8L782.2,425.3L778.7,430.8L774.1,429.5L773.4,425.7L769.4,420.1L766.6,418.9L765.6,414.1L763.8,410.6L758.3,407.9L754.4,404.2L754.2,401.5L748.6,398.4L745.6,394.6L740.9,392.3L732.8,380.9L730.9,381.6L724.1,377.6L724.1,375.1L727.4,369.8L733.5,367.4Z","South Dakota":"M363.1,130.1L481.3,135.7L481.0,138.3L476.6,143.1L479.4,147.5L483.0,150.1L482.8,191.1L480.7,191.5L481.5,193.4L481.0,197.4L483.0,199.7L481.8,201.3L479.7,209.2L482.8,214.2L479.8,213.6L478.7,210.3L470.0,206.0L459.9,205.3L457.9,207.5L449.4,203.2L448.9,202.0L397.3,199.8L357.3,196.8L363.1,130.1Z","Tennessee":"M633.8,345.6L633.2,341.5L637.2,342.1L696.7,336.9L748.0,330.0L748.1,335.5L744.9,337.1L743.2,341.6L739.9,341.2L733.4,346.6L732.6,344.5L730.3,346.3L727.1,351.9L722.6,353.8L718.6,357.9L713.6,358.7L709.6,362.6L708.6,366.5L705.1,367.5L705.3,372.9L634.0,380.1L595.1,382.9L596.9,382.1L598.5,378.0L597.8,372.5L601.0,368.5L601.4,365.0L604.0,363.6L604.3,359.3L607.5,353.3L607.0,347.6L633.8,345.6Z","Texas":"M385.1,348.3L417.9,349.9L416.0,394.4L417.4,394.2L421.4,398.7L423.7,398.0L429.6,398.5L430.8,402.9L434.5,402.8L438.6,404.9L442.3,404.8L443.7,406.7L446.1,404.6L449.7,405.7L451.2,408.3L453.8,408.7L455.2,411.9L458.5,408.9L462.9,410.8L464.5,412.7L466.7,411.8L468.2,414.7L473.0,409.6L474.3,412.3L478.4,412.3L482.3,414.0L483.7,416.0L487.4,412.5L491.4,411.3L493.3,412.6L497.7,410.3L498.7,411.6L503.5,411.7L504.7,409.7L509.6,411.9L511.4,414.5L518.7,416.9L520.7,419.0L524.3,417.8L527.0,418.7L527.8,454.3L532.1,459.2L532.3,464.2L537.8,473.3L538.3,478.2L536.4,484.1L534.5,486.5L535.3,489.6L533.9,492.0L535.5,496.3L531.1,504.5L532.9,506.7L529.6,506.9L519.4,510.2L515.7,508.5L515.0,504.8L512.4,507.4L510.6,506.8L509.7,510.1L511.7,511.4L512.1,515.7L508.5,520.2L502.5,525.8L490.5,531.8L489.3,530.8L485.7,532.3L485.6,530.9L480.6,531.9L478.4,529.1L476.9,529.7L482.2,535.5L478.3,537.4L474.7,536.2L474.1,540.3L469.6,544.5L464.8,552.2L461.7,560.4L459.5,559.7L458.9,562.7L461.3,562.0L460.0,567.9L458.5,568.1L458.3,571.5L460.2,573.3L460.6,580.1L462.9,582.5L463.4,586.9L465.1,590.7L458.8,592.9L456.2,589.9L451.4,588.7L444.9,588.9L439.5,585.0L435.4,584.5L432.3,581.5L428.1,580.4L425.2,577.4L423.6,570.6L420.0,566.4L420.6,562.9L419.1,559.2L419.7,556.0L417.3,552.3L415.2,551.8L411.9,548.5L411.0,544.3L408.2,540.5L404.0,537.2L402.3,530.3L400.4,528.3L398.0,522.7L397.4,518.2L395.0,514.9L391.0,511.8L390.1,509.8L386.3,507.8L383.5,502.7L369.8,501.0L365.5,498.9L364.4,501.2L359.6,501.6L355.7,506.1L353.0,513.5L351.8,513.6L348.7,517.8L345.5,517.7L340.9,513.9L329.1,507.3L327.0,504.1L322.5,500.8L319.7,494.1L320.0,488.2L317.2,483.2L316.8,479.0L314.9,476.2L307.8,471.6L304.3,466.0L301.2,463.8L298.2,459.0L293.6,456.1L290.9,449.8L288.2,448.2L286.3,445.4L287.0,443.2L354.8,449.5L363.0,346.8L385.1,348.3Z","Utah":"M220.5,202.5L239.0,205.5L235.4,228.1L269.0,233.1L260.2,297.5L256.5,324.0L167.8,309.3L189.5,196.9L220.5,202.5Z","Vermont":"M878.9,106.3L879.6,108.4L878.4,112.6L880.8,115.8L879.2,120.2L874.5,123.6L876.0,129.0L873.3,141.6L875.4,154.4L874.3,155.9L875.0,159.2L876.8,160.6L863.7,163.5L859.8,146.1L856.4,143.1L856.8,141.1L854.0,135.3L854.7,130.4L854.1,126.0L851.7,122.4L850.2,113.5L878.9,106.3Z","Virginia":"M852.6,277.4L855.2,276.4L853.7,280.7L851.6,282.6L849.5,297.2L846.9,299.5L845.3,296.7L845.4,289.5L848.1,279.7L852.6,277.4ZM795.2,255.1L805.5,260.9L806.5,256.2L809.2,256.1L811.5,257.6L812.1,260.9L815.9,261.3L818.6,262.9L820.6,265.9L819.8,269.8L817.9,271.2L817.2,274.6L818.4,276.8L822.9,275.1L824.5,278.5L830.9,278.8L833.2,281.3L838.7,283.3L837.8,290.0L840.8,294.5L838.9,297.4L839.2,300.3L841.8,301.5L840.0,304.7L835.6,301.9L835.0,303.3L838.7,305.3L847.5,304.1L851.5,311.9L786.9,324.8L748.0,330.0L712.3,334.8L721.5,330.3L722.3,327.6L725.6,326.3L725.5,324.3L728.0,322.4L727.7,320.6L733.8,316.4L739.6,309.3L739.6,311.2L742.6,314.7L745.9,316.1L748.1,315.6L751.1,312.1L753.8,314.1L758.2,312.1L765.5,306.5L766.4,307.7L769.2,305.3L768.6,301.1L776.0,284.2L776.4,278.8L779.9,281.4L782.9,281.9L784.4,279.7L786.6,271.0L789.2,272.6L795.5,261.9L795.2,255.1Z","Washington":"M175.3,31.5L161.8,89.9L163.0,94.2L162.2,98.1L130.4,90.5L127.9,91.4L121.6,90.4L114.4,90.6L110.1,91.8L105.4,91.2L103.7,89.6L94.4,90.4L94.3,88.9L89.8,86.3L85.5,85.5L77.8,87.1L70.6,82.5L71.8,75.7L71.1,72.6L68.5,69.4L64.5,69.1L62.6,65.9L60.1,64.2L57.5,64.8L55.2,62.1L56.6,59.3L59.1,58.3L57.4,52.9L59.0,40.5L58.2,38.6L59.1,29.9L57.2,25.8L58.0,19.0L60.9,15.3L68.4,22.8L72.6,23.9L76.3,26.2L80.5,26.2L81.8,28.7L85.3,29.6L86.4,35.0L88.2,35.2L86.1,47.8L87.8,47.6L87.7,42.2L89.5,37.5L93.3,33.2L92.0,30.6L92.8,27.0L92.5,22.7L94.0,20.0L94.0,16.4L91.9,15.3L90.4,12.2L91.7,10.0L175.3,31.5ZM87.9,25.1L90.1,24.7L88.5,29.0L86.7,26.6L87.9,25.1ZM85.1,17.8L87.6,15.5L88.7,19.5L87.2,22.3L84.1,20.5L85.1,17.8Z","West Virginia":"M753.7,235.1L757.1,255.8L774.9,252.8L776.7,264.4L779.7,261.7L782.4,257.3L784.8,257.6L787.6,253.7L792.9,254.4L793.1,251.8L795.9,251.4L797.2,249.3L800.5,250.9L803.4,250.3L806.5,256.2L805.5,260.9L795.2,255.1L795.5,261.9L789.2,272.6L786.6,271.0L784.4,279.7L782.9,281.9L779.9,281.4L776.4,278.8L776.0,284.2L768.6,301.1L769.2,305.3L766.4,307.7L765.5,306.5L758.2,312.1L753.8,314.1L751.1,312.1L748.1,315.6L745.9,316.1L742.6,314.7L739.6,311.2L739.6,309.3L737.3,309.2L733.5,307.1L732.3,304.6L729.0,301.7L726.2,297.6L725.8,290.7L730.3,289.6L730.5,286.5L732.4,284.9L731.1,281.6L733.5,275.6L736.6,278.7L738.0,276.4L737.2,273.8L738.7,269.1L740.7,269.0L742.2,265.4L744.3,266.6L746.3,265.3L751.8,256.9L752.0,248.4L753.5,242.5L753.0,239.0L751.4,236.8L753.7,235.1Z","Wisconsin":"M577.7,118.7L580.7,119.9L582.6,123.7L599.1,127.2L606.1,130.0L608.1,129.1L615.0,130.8L620.6,135.9L620.8,139.9L619.6,143.1L623.3,143.3L622.1,146.7L624.8,148.8L624.4,151.6L621.4,152.3L618.6,161.5L620.5,161.9L625.0,154.7L628.1,152.6L630.2,146.7L633.4,145.1L633.5,148.1L631.4,151.1L627.8,160.9L627.5,170.0L625.9,171.4L624.8,176.6L625.8,180.9L623.2,191.2L624.1,196.7L626.6,201.6L626.5,208.2L610.1,209.6L579.4,211.2L578.0,208.4L572.0,206.1L569.7,197.4L571.6,194.6L569.0,192.5L567.6,186.5L567.9,182.9L564.5,178.0L561.9,177.3L557.1,173.6L556.2,170.7L551.1,168.4L549.4,166.0L546.0,165.7L541.6,161.7L542.5,153.4L542.0,149.5L543.7,146.0L541.6,143.2L539.7,143.0L539.9,139.7L543.4,134.8L547.8,132.7L548.7,131.3L548.2,117.9L551.3,116.0L552.5,116.9L556.0,117.0L570.6,110.3L572.1,111.9L570.1,114.9L575.4,118.5L577.7,118.7Z","Wyoming":"M281.0,142.5L361.1,151.5L353.4,242.4L288.0,235.5L235.4,228.1L249.7,137.8L281.0,142.5Z"},"cities":[["Seattle, WA",47.61,-122.33,89.3,41.9],["Spokane, WA",47.66,-117.43,162.7,59.6],["Yakima, WA",46.6,-120.51,110.5,71.4],["Olympia, WA",47.04,-122.9,77.2,51.8],["Portland, OR",45.52,-122.68,71.0,85.9],["Salem, OR",44.94,-123.04,61.8,96.9],["Eugene, OR",44.05,-123.09,55.3,116.2],["Bend, OR",44.06,-121.32,83.1,123.8],["Medford, OR",42.33,-122.87,47.8,154.9],["Pendleton, OR",45.67,-118.79,131.6,98.5],["Boise, ID",43.62,-116.2,161.9,153.3],["Twin Falls, ID",42.56,-114.46,185.1,182.9],["Pocatello, ID",42.87,-112.45,219.2,182.0],["Idaho Falls, ID",43.49,-112.03,228.4,169.2],["Coeur d'Alene, ID",47.68,-116.78,172.6,61.3],["Missoula, MT",46.87,-113.99,211.3,88.0],["Helena, MT",46.59,-112.04,240.1,99.7],["Butte, MT",46.0,-112.53,230.2,111.5],["Bozeman, MT",45.68,-111.04,252.3,122.6],["Billings, MT",45.78,-108.5,292.5,126.2],["Great Falls, MT",47.5,-111.3,254.9,81.3],["Miles City, MT",46.41,-105.84,335.9,116.9],["San Francisco, CA",37.77,-122.42,26.3,257.5],["Sacramento, CA",38.58,-121.49,47.2,244.0],["Redding, CA",40.59,-122.39,44.6,195.4],["Eureka, CA",40.8,-124.16,16.9,182.2],["Fresno, CA",36.74,-119.79,65.6,292.6],["Bakersfield, CA",35.37,-119.02,71.6,326.5],["Los Angeles, CA",34.05,-118.24,78.5,359.3],["San Diego, CA",32.72,-117.16,91.4,393.5],["Santa Barbara, CA",34.42,-119.7,54.1,344.5],["San Luis Obispo, CA",35.28,-120.66,41.8,321.0],["Monterey, CA",36.6,-121.89,28.2,285.9],["Palm Springs, CA",33.83,-116.55,108.2,371.2],["Barstow, CA",34.9,-117.02,104.9,345.4],["Truckee, CA",39.33,-120.18,73.8,233.3],["Yosemite Valley, CA",37.75,-119.59,74.8,271.0],["Reno, NV",39.53,-119.81,81.1,230.5],["Las Vegas, NV",36.17,-115.14,144.7,324.2],["Elko, NV",40.83,-115.76,155.8,217.3],["Winnemucca, NV",40.97,-117.74,123.5,206.9],["Ely, NV",39.25,-114.89,163.1,255.8],["Tonopah, NV",38.07,-117.23,117.3,273.7],["Salt Lake City, UT",40.76,-111.89,220.3,231.2],["Ogden, UT",41.22,-111.97,220.7,220.6],["Provo, UT",40.23,-111.66,222.2,243.8],["St. George, UT",37.1,-113.58,176.5,308.6],["Moab, UT",38.57,-109.55,252.6,287.1],["Wendover, UT",40.74,-114.04,184.1,225.1],["Green River, UT",38.99,-110.16,243.4,276.0],["Phoenix, AZ",33.45,-112.07,189.1,395.9],["Tucson, AZ",32.22,-110.97,205.1,427.0],["Flagstaff, AZ",35.2,-111.65,203.4,357.7],["Yuma, AZ",32.69,-114.63,138.3,404.2],["Kingman, AZ",35.19,-114.05,159.9,350.1],["Grand Canyon Village, AZ",36.05,-112.14,197.8,336.9],["Albuquerque, NM",35.08,-106.65,294.3,373.1],["Santa Fe, NM",35.69,-105.94,308.8,360.6],["Las Cruces, NM",32.32,-106.76,285.1,435.6],["Gallup, NM",35.53,-108.74,257.4,358.1],["Tucumcari, NM",35.17,-103.72,348.2,376.2],["Roswell, NM",33.39,-104.52,329.9,415.6],["Denver, CO",39.74,-104.99,334.8,269.8],["Colorado Springs, CO",38.83,-104.82,335.8,290.9],["Grand Junction, CO",39.06,-108.55,271.5,278.3],["Pueblo, CO",38.25,-104.61,338.3,304.5],["Durango, CO",37.28,-107.88,278.1,320.3],["Fort Collins, CO",40.59,-105.08,335.1,250.3],["Limon, CO",39.26,-103.69,356.3,282.8],["Glenwood Springs, CO",39.55,-107.32,294.2,269.8],["Cheyenne, WY",41.14,-104.82,340.7,238.1],["Laramie, WY",41.31,-105.59,328.1,233.0],["Casper, WY",42.87,-106.31,319.8,196.2],["Rock Springs, WY",41.59,-109.2,268.3,219.3],["Jackson, WY",43.48,-110.76,249.0,172.8],["Sheridan, WY",44.8,-106.96,314.2,151.3],["Cody, WY",44.53,-109.06,279.8,153.1],["Yellowstone, WY",44.43,-110.59,255.0,151.8],["Fargo, ND",46.88,-96.79,477.9,114.2],["Bismarck, ND",46.81,-100.78,415.6,114.0],["Minot, ND",48.23,-101.3,409.3,81.5],["Grand Forks, ND",47.93,-97.03,474.4,90.5],["Dickinson, ND",46.88,-102.79,384.4,110.5],["Sioux Falls, SD",43.55,-96.73,478.2,189.9],["Rapid City, SD",44.08,-103.23,372.7,173.4],["Pierre, SD",44.37,-100.35,419.8,169.7],["Mitchell, SD",43.71,-98.03,457.0,186.0],["Omaha, NE",41.26,-95.94,491.2,242.3],["Lincoln, NE",40.81,-96.7,478.3,252.6],["North Platte, NE",41.12,-100.77,409.3,243.5],["Kearney, NE",40.7,-99.08,437.6,254.3],["Scottsbluff, NE",41.87,-103.67,361.5,223.2],["Wichita, KS",37.69,-97.34,466.4,324.0],["Topeka, KS",39.05,-95.68,495.8,293.0],["Kansas City, MO",39.1,-94.58,515.0,291.7],["Salina, KS",38.84,-97.61,462.0,297.6],["Hays, KS",38.88,-99.33,431.9,295.9],["Dodge City, KS",37.75,-100.02,418.7,321.3],["Garden City, KS",37.97,-100.87,403.9,315.6],["Oklahoma City, OK",35.47,-97.52,462.3,374.9],["Tulsa, OK",36.15,-95.99,490.4,359.5],["Lawton, OK",34.6,-98.39,445.9,394.5],["Amarillo, TX",35.22,-101.83,383.0,377.6],["Lubbock, TX",33.58,-101.85,380.3,415.0],["El Paso, TX",31.76,-106.49,288.9,448.9],["Midland, TX",32.0,-102.08,373.7,450.8],["Dallas, TX",32.78,-96.8,475.0,436.7],["Fort Worth, TX",32.76,-97.33,465.0,437.0],["Austin, TX",30.27,-97.74,456.1,493.7],["San Antonio, TX",29.42,-98.49,440.9,512.7],["Houston, TX",29.76,-95.37,502.6,505.5],["Corpus Christi, TX",27.8,-97.4,462.0,549.8],["Waco, TX",31.55,-97.15,468.0,464.7],["Abilene, TX",32.45,-99.73,419.1,442.9],["Laredo, TX",27.51,-99.51,419.1,555.3],["Beaumont, TX",30.08,-94.13,526.9,497.9],["Brownsville, TX",25.9,-97.5,459.3,592.7],["Wichita Falls, TX",33.91,-98.49,443.6,410.3],["Texarkana, TX",33.43,-94.05,526.9,421.5],["Minneapolis, MN",44.98,-93.27,534.0,156.7],["Duluth, MN",46.79,-92.1,551.1,115.0],["Rochester, MN",44.02,-92.47,547.7,178.2],["St. Cloud, MN",45.56,-94.16,519.5,143.9],["Des Moines, IA",41.59,-93.62,530.3,234.3],["Cedar Rapids, IA",41.98,-91.67,562.8,224.2],["Sioux City, IA",42.5,-96.4,483.6,213.9],["Davenport, IA",41.52,-90.58,581.7,233.8],["Dubuque, IA",42.5,-90.66,579.1,211.5],["St. Louis, MO",38.63,-90.2,592.1,299.5],["Springfield, MO",37.21,-93.29,538.8,334.5],["Columbia, MO",38.95,-92.33,554.4,294.1],["Joplin, MO",37.08,-94.51,517.0,338.0],["Little Rock, AR",34.75,-92.29,558.9,390.3],["Fayetteville, AR",36.06,-94.16,523.7,361.3],["Hot Springs, AR",34.5,-93.06,544.8,396.5],["Fort Smith, AR",35.39,-94.4,519.6,376.7],["New Orleans, LA",29.95,-90.07,606.8,497.6],["Baton Rouge, LA",30.45,-91.15,585.0,487.5],["Shreveport, LA",32.53,-93.75,533.1,441.9],["Lafayette, LA",30.22,-92.02,568.2,493.5],["Lake Charles, LA",30.23,-93.22,544.7,494.1],["Jackson, MS",32.3,-90.18,601.3,444.3],["Gulfport, MS",30.37,-89.09,625.3,486.8],["Tupelo, MS",34.26,-88.7,626.1,397.6],["Hattiesburg, MS",31.33,-89.29,619.9,465.2],["Chicago, IL",41.88,-87.63,630.6,222.0],["Springfield, IL",39.8,-89.64,600.1,272.1],["Peoria, IL",40.69,-89.59,599.6,251.7],["Champaign, IL",40.12,-88.24,623.7,263.0],["Rockford, IL",42.27,-89.09,605.5,215.0],["Effingham, IL",39.12,-88.54,620.3,286.3],["Milwaukee, WI",43.04,-87.91,623.7,195.9],["Madison, WI",43.07,-89.4,599.1,197.1],["Green Bay, WI",44.52,-88.02,619.0,162.4],["Eau Claire, WI",44.81,-91.5,562.6,159.5],["La Crosse, WI",43.8,-91.24,567.9,182.3],["Wausau, WI",44.96,-89.63,592.4,154.4],["Detroit, MI",42.33,-83.05,705.6,203.1],["Grand Rapids, MI",42.96,-85.67,660.7,194.2],["Lansing, MI",42.73,-84.56,679.6,197.3],["Traverse City, MI",44.76,-85.62,657.0,153.3],["Marquette, MI",46.54,-87.4,624.9,115.9],["Mackinaw City, MI",45.78,-84.73,668.5,128.6],["Kalamazoo, MI",42.29,-85.59,663.7,209.3],["Indianapolis, IN",39.77,-86.16,660.2,267.7],["Fort Wayne, IN",41.08,-85.14,674.3,235.9],["Evansville, IN",37.97,-87.57,639.6,311.2],["South Bend, IN",41.68,-86.25,654.1,224.3],["Bloomington, IN",39.17,-86.53,655.2,282.0],["Terre Haute, IN",39.47,-87.41,639.3,276.6],["Columbus, OH",39.96,-83.0,713.9,256.8],["Cleveland, OH",41.5,-81.69,730.9,218.7],["Cincinnati, OH",39.1,-84.51,690.4,279.7],["Dayton, OH",39.76,-84.19,694.1,264.0],["Toledo, OH",41.65,-83.54,699.6,219.7],["Akron, OH",41.08,-81.52,735.2,227.8],["Youngstown, OH",41.1,-80.65,749.8,225.0],["Louisville, KY",38.25,-85.76,670.8,301.6],["Lexington, KY",38.04,-84.5,693.5,303.9],["Bowling Green, KY",36.99,-86.44,661.8,331.6],["Paducah, KY",37.08,-88.6,622.9,333.0],["Nashville, TN",36.16,-86.78,657.5,351.2],["Memphis, TN",35.15,-90.05,599.7,379.0],["Knoxville, TN",35.96,-83.92,709.8,349.9],["Chattanooga, TN",35.05,-85.31,687.0,373.7],["Atlanta, GA",33.75,-84.39,707.4,401.2],["Savannah, GA",32.08,-81.09,774.7,430.4],["Macon, GA",32.84,-83.63,724.3,420.1],["Augusta, GA",33.47,-81.97,753.4,401.5],["Valdosta, GA",30.83,-83.28,737.0,464.7],["Birmingham, AL",33.52,-86.8,663.0,411.4],["Montgomery, AL",32.38,-86.3,675.0,436.4],["Mobile, AL",30.69,-88.04,645.2,477.9],["Huntsville, AL",34.73,-86.59,664.2,383.5],["Dothan, AL",31.22,-85.39,695.2,460.9],["Jacksonville, FL",30.33,-81.66,769.9,471.5],["Orlando, FL",28.54,-81.38,781.5,510.8],["Winter Park, FL",28.6,-81.34,782.1,509.4],["Tampa, FL",27.95,-82.46,762.1,527.2],["Miami, FL",25.76,-80.19,815.4,569.0],["Tallahassee, FL",30.44,-84.28,718.8,476.0],["Pensacola, FL",30.42,-87.22,661.7,482.6],["Gainesville, FL",29.65,-82.32,759.3,488.7],["Fort Myers, FL",26.64,-81.87,778.2,554.8],["Key West, FL",24.56,-81.78,787.0,600.8],["Daytona Beach, FL",29.21,-81.02,786.3,494.7],["West Palm Beach, FL",26.72,-80.05,814.7,547.2],["Charlotte, NC",35.23,-80.84,768.0,358.4],["Raleigh, NC",35.78,-78.64,805.6,339.1],["Asheville, NC",35.6,-82.55,735.7,354.8],["Wilmington, NC",34.23,-77.94,824.8,371.7],["Greensboro, NC",36.07,-79.79,783.8,336.3],["Outer Banks, NC",35.91,-75.6,859.4,325.3],["Columbia, SC",34.0,-81.03,768.9,386.8],["Charleston, SC",32.78,-79.93,793.9,411.0],["Greenville, SC",34.85,-82.4,740.8,371.4],["Myrtle Beach, SC",33.69,-78.89,809.6,387.1],["Richmond, VA",37.54,-77.44,819.3,295.4],["Norfolk, VA",36.85,-76.29,842.6,306.8],["Roanoke, VA",37.27,-79.94,776.4,309.6],["Charlottesville, VA",38.03,-78.48,799.0,287.9],["Charleston, WV",38.35,-81.63,742.8,289.9],["Morgantown, WV",39.63,-79.96,767.0,256.3],["Wheeling, WV",40.06,-80.72,752.4,248.7],["Washington, DC",38.91,-77.04,820.0,263.2],["Baltimore, MD",39.29,-76.61,825.6,253.2],["Ocean City, MD",38.34,-75.08,856.5,268.8],["Hagerstown, MD",39.64,-77.72,805.1,249.1],["Wilmington, DE",39.74,-75.55,841.5,239.2],["Dover, DE",39.16,-75.52,844.9,252.1],["Philadelphia, PA",39.95,-75.17,846.9,233.1],["Pittsburgh, PA",40.44,-79.99,763.4,238.1],["Harrisburg, PA",40.27,-76.88,816.5,232.1],["Erie, PA",42.13,-80.09,755.2,200.2],["Scranton, PA",41.41,-75.66,831.5,202.2],["State College, PA",40.79,-77.86,797.8,223.7],["Allentown, PA",40.6,-75.49,838.3,219.8],["Breezewood, PA",40.0,-78.24,794.8,242.7],["Newark, NJ",40.74,-74.17,859.6,211.6],["Atlantic City, NJ",39.36,-74.42,862.5,243.4],["Trenton, NJ",40.22,-74.76,852.4,225.5],["New York, NY",40.71,-74.01,862.4,211.7],["Buffalo, NY",42.89,-78.88,772.1,179.6],["Rochester, NY",43.16,-77.61,791.5,169.6],["Syracuse, NY",43.05,-76.15,815.6,167.3],["Albany, NY",42.65,-73.76,856.3,167.5],["Binghamton, NY",42.1,-75.92,823.9,187.7],["Lake Placid, NY",44.28,-73.98,844.2,132.1],["Montauk, NY",41.04,-71.95,894.7,195.9],["Hartford, CT",41.76,-72.67,878.8,183.0],["New Haven, CT",41.31,-72.92,877.2,194.0],["Providence, RI",41.82,-71.41,899.0,176.3],["Boston, MA",42.36,-71.06,901.4,162.9],["Worcester, MA",42.26,-71.8,890.1,168.3],["Springfield, MA",42.1,-72.59,878.2,175.1],["Cape Cod, MA",41.67,-70.3,917.9,174.8],["Burlington, VT",44.48,-73.21,855.2,124.8],["Montpelier, VT",44.26,-72.58,866.3,127.2],["Concord, NH",43.21,-71.54,888.8,146.2],["Portsmouth, NH",43.07,-70.76,902.0,145.9],["Portland, ME",43.66,-70.26,906.4,130.8],["Bangor, ME",44.8,-68.77,922.5,99.1],["Bar Harbor, ME",44.39,-68.2,934.0,105.4],["Augusta, ME",44.31,-69.78,909.9,114.4],["Caribou, ME",46.86,-68.01,920.6,50.9]],"P":{"n":0.6028370046288244,"C":1.351221325417899,"r0":1.3032624269880215,"l0":-1.6755160819145565,"s":1301.8800136072698,"mx":-0.36886149895413345,"my":0.24469803312138483}};
+const $ = id => document.getElementById(id);
+const fmt1 = n => n.toFixed(1), fmt2 = n => n.toFixed(2);
+const comma = n => Math.round(n).toLocaleString('en-US');
+
+/* ---------- state ---------- */
+const DEFAULTS = {target:50, grace:10, ft:20, away:5, sound:'chime', vol:0.6, nick:'', mode:'separate'};
+let S = {settings:{...DEFAULTS}, totalMi:0, days:{}, journey:null, done:[]};   // persisted
+const live = {rpm:0, revs:null, lastEvt:null, lastRevAt:0, sesMi:0, sesSec:0, belowSince:null, stoppedSince:null, lastAlert:0, pedaledOnce:false, paused:false, sim:false, simRpm:0, simAcc:0};
+let dirty = false, db = null, uid = null, userCap = null, riders = [];
+
+const dayKey = (d=new Date()) => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+function weekStart(d=new Date()){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x}
+function weekMi(){const ws=weekStart();let t=0;for(const[k,v] of Object.entries(S.days)){const [y,m,dd]=k.split('-').map(Number);if(new Date(y,m-1,dd)>=ws)t+=v.mi}return t}
+function today(){return S.days[dayKey()]||(S.days[dayKey()]={mi:0,min:0})}
+
+function loadLocal(){try{const r=localStorage.getItem('pedal-v1');if(r){const o=JSON.parse(r);S={settings:{...DEFAULTS,...o.settings},totalMi:o.totalMi||0,days:o.days||{},journey:o.journey||null,done:o.done||[]}}}catch(e){}}
+function saveLocal(){try{localStorage.setItem('pedal-v1',JSON.stringify(S))}catch(e){}}
+function pruneDays(){const keys=Object.keys(S.days).sort();while(keys.length>120)delete S.days[keys.shift()]}
+
+/* ---------- audio ---------- */
+let ac=null;
+function audio(){if(!ac){try{ac=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(ac&&ac.state==='suspended')ac.resume();return ac}
+function tone(f,t0,dur,type,gain){const a=audio();if(!a)return;const o=a.createOscillator(),g=a.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(0.0001,a.currentTime+t0);g.gain.exponentialRampToValueAtTime(gain*S.settings.vol+0.0001,a.currentTime+t0+0.01);g.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+t0+dur);o.connect(g).connect(a.destination);o.start(a.currentTime+t0);o.stop(a.currentTime+t0+dur+0.05)}
+function play(kind){const s=S.settings.sound;
+  const seq = kind==='slow' ? {chime:[[660,0],[880,.18]],beep:[[880,0],[880,.2]],block:[[1200,0],[1200,.16]]}[s]
+                            : {chime:[[523,0],[392,.22],[330,.44]],beep:[[440,0],[440,.18],[440,.36]],block:[[800,0],[800,.14],[800,.28]]}[s];
+  const type={chime:'sine',beep:'square',block:'triangle'}[s], dur={chime:.45,beep:.12,block:.06}[s], gain={chime:.5,beep:.18,block:.7}[s];
+  seq.forEach(([f,t])=>tone(f,t,dur,type,gain))}
+
+/* ---------- Bluetooth cadence (CSC 0x1816 / 0x2A5B) ---------- */
+let btDev=null;
+function showMsg(t){$('msg').textContent=t;$('msg').hidden=!t}
+async function connect(){
+  audio();
+  if(!navigator.bluetooth){showMsg("This browser can't reach Bluetooth sensors. Use Chrome or Edge on a computer with Bluetooth turned on.");return}
+  try{
+    btDev=await navigator.bluetooth.requestDevice({filters:[{services:['cycling_speed_and_cadence']}]});
+    btDev.addEventListener('gattserverdisconnected',()=>{setConn(false,'Disconnected');setTimeout(reconnect,2000)});
+    await attach();
+    showMsg('');
+  }catch(e){
+    if(e&&e.name==='NotFoundError')return; // picker closed
+    if(e&&(e.name==='SecurityError'||e.name==='NotAllowedError')){showMsg("This window doesn't allow Bluetooth. Open the standalone copy of this page in Chrome or Edge to connect your sensor.");return}
+    showMsg("Couldn't connect to the sensor: "+(e&&e.message||e)+". Make sure it's in cadence mode and awake (spin the pedals), then try again.");
+  }
+}
+async function attach(){
+  const srv=await btDev.gatt.connect();
+  const svc=await srv.getPrimaryService('cycling_speed_and_cadence');
+  const ch=await svc.getCharacteristic('csc_measurement');
+  ch.addEventListener('characteristicvaluechanged',ev=>onCsc(ev.target.value));
+  await ch.startNotifications();
+  live.revs=null;live.lastEvt=null;
+  setConn(true,btDev.name||'Sensor connected');
+  if(live.sim){$('simOn').checked=false;setSim(false)}
+}
+async function reconnect(){if(!btDev||btDev.gatt.connected)return;try{await attach()}catch(e){setTimeout(reconnect,5000)}}
+function onCsc(dv){
+  const flags=dv.getUint8(0);let i=1;
+  if(flags&1)i+=6;            // wheel data present: skip uint32 revs + uint16 time
+  if(!(flags&2)){showMsg('The sensor is sending speed, not cadence. Switch it to cadence mode (see its instructions) and reconnect.');return}
+  const revs=dv.getUint16(i,true), evt=dv.getUint16(i+2,true);
+  if(live.revs!==null){
+    const dr=(revs-live.revs+65536)%65536, dt=((evt-live.lastEvt+65536)%65536)/1024;
+    if(dr>0&&dr<50){
+      addRevs(dr);
+      if(dt>0)live.rpm=Math.min(200,dr/dt*60);
+      live.lastRevAt=performance.now();
+    }
+  }
+  live.revs=revs;live.lastEvt=evt;
+}
+function setConn(on,txt){$('conn').classList.toggle('on',on);$('connTxt').textContent=txt}
+
+/* ---------- distance ---------- */
+function addRevs(n){
+  const mi=n*S.settings.ft/5280;
+  live.sesMi+=mi;S.totalMi+=mi;today().mi+=mi;live.pedaledOnce=true;dirty=true;
+}
+
+/* ---------- simulator ---------- */
+function setSim(on){live.sim=on;$('simRpm').disabled=!on;if(on){audio();setConn(true,'Simulator')}else{live.simRpm=0;$('simRpm').value=0;$('simVal').textContent='0 RPM';if(!btDev||!btDev.gatt.connected)setConn(false,'No sensor')}}
+
+/* ---------- 1-second tick ---------- */
+let lastTick=performance.now();
+function tick(){
+  const now=performance.now(),dt=Math.min(5,(now-lastTick)/1000);lastTick=now;
+  if(live.sim){
+    live.simAcc+=live.simRpm/60*dt;const whole=Math.floor(live.simAcc);
+    if(whole>0){live.simAcc-=whole;addRevs(whole);live.lastRevAt=now}
+    live.rpm=live.simRpm;
+  }else if(now-live.lastRevAt>3000){live.rpm=0}
+  const st=S.settings,moving=live.rpm>0.5;
+  if(moving){live.sesSec+=dt;today().min+=dt/60;live.stoppedSince=null}
+  else if(live.stoppedSince===null)live.stoppedSince=now;
+  if(moving&&live.rpm<st.target){if(live.belowSince===null)live.belowSince=now}else if(moving)live.belowSince=null;
+
+  // status + alerts
+  let status='Waiting',cls='';
+  const away=live.stoppedSince!==null&&now-live.stoppedSince>st.away*60000;
+  if(!live.pedaledOnce){status='Start pedaling'}
+  else if(!moving){status=away?'Away · alerts paused':'Stopped';cls='stop'}
+  else if(live.rpm<st.target){status='Too slow';cls='slow'}
+  else{status='Pedaling';cls='ok'}
+  if(live.paused&&live.pedaledOnce)status+=' · muted';
+  $('status').textContent=status;$('status').className='status '+cls;
+  const graceMs=st.grace*1000;
+  if(!live.paused&&live.pedaledOnce&&!away){
+    if(!moving&&now-live.stoppedSince>graceMs&&now-live.lastAlert>15000){play('stop');live.lastAlert=now}
+    else if(moving&&live.belowSince!==null&&now-live.belowSince>graceMs&&now-live.lastAlert>8000){play('slow');live.lastAlert=now}
+  }
+  document.title=(cls==='stop'&&!away&&!live.paused)?'⏸ Keep pedaling!':(cls==='slow'&&!live.paused)?'↓ Speed up · '+Math.round(live.rpm)+' RPM':'Desk Ride Journeys';
+  checkArrival();renderLive();
+}
+function renderLive(){
+  const st=S.settings,mph=live.rpm*st.ft*60/5280;
+  $('rpm').textContent=Math.round(live.rpm);
+  const max=Math.max(100,st.target*1.6);
+  $('rpmBar').style.width=Math.min(100,live.rpm/max*100)+'%';$('rpmTarget').style.left=(st.target/max*100)+'%';
+  $('targetNote').textContent='Target '+st.target+' RPM · '+fmt1(st.target*st.ft*60/5280)+' mph';
+  $('spd').textContent=fmt1(mph);$('sesMi').textContent=fmt2(live.sesMi);
+  const s=Math.floor(live.sesSec);$('sesTime').textContent=Math.floor(s/3600)?Math.floor(s/3600)+':'+String(Math.floor(s/60)%60).padStart(2,'0')+':'+String(s%60).padStart(2,'0'):Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+  $('tToday').textContent=fmt1(today().mi);$('tWeek').textContent=fmt1(weekMi());$('tAll').textContent=S.totalMi<100?fmt1(S.totalMi):comma(S.totalMi);
+  renderTrip();
+}
+
+/* ---------- geography ---------- */
+const PJ=MAP.P, RAD=Math.PI/180, RE=3958.8, ROAD=1.2;   // road miles ≈ straight-line miles × 1.2
+function xy(lat,lon){const t=PJ.n*(lon*RAD-PJ.l0),r=Math.sqrt(PJ.C-2*PJ.n*Math.sin(lat*RAD))/PJ.n;return[(r*Math.sin(t)-PJ.mx)*PJ.s+10,(PJ.my-(PJ.r0-r*Math.cos(t)))*PJ.s+10]}
+function gcd(a,b){const p1=a[0]*RAD,p2=b[0]*RAD,dp=p2-p1,dl=(b[1]-a[1])*RAD;const h=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return 2*RE*Math.asin(Math.min(1,Math.sqrt(h)))}
+function brg(a,b){const p1=a[0]*RAD,p2=b[0]*RAD,dl=(b[1]-a[1])*RAD;return Math.atan2(Math.sin(dl)*Math.cos(p2),Math.cos(p1)*Math.sin(p2)-Math.sin(p1)*Math.cos(p2)*Math.cos(dl))}
+function interp(a,b,f){const d=gcd(a,b)/RE;if(d<1e-9)return[a[0],a[1]];const A=Math.sin((1-f)*d)/Math.sin(d),B=Math.sin(f*d)/Math.sin(d);
+  const p1=a[0]*RAD,l1=a[1]*RAD,p2=b[0]*RAD,l2=b[1]*RAD;
+  const x=A*Math.cos(p1)*Math.cos(l1)+B*Math.cos(p2)*Math.cos(l2),y=A*Math.cos(p1)*Math.sin(l1)+B*Math.cos(p2)*Math.sin(l2),z=A*Math.sin(p1)+B*Math.sin(p2);
+  return[Math.atan2(z,Math.hypot(x,y))/RAD,Math.atan2(y,x)/RAD]}
+const CITY=MAP.cities.map(c=>({n:c[0],lat:c[1],lon:c[2],x:c[3],y:c[4]}));
+const byName=new Map(CITY.map(c=>[c.n.toLowerCase(),c]));
+const cityOf=n=>n?(byName.get(String(n).toLowerCase())||null):null;
+function routeMiles(a,b){return gcd([a.lat,a.lon],[b.lat,b.lon])*ROAD}
+const townCache=new Map();
+function towns(a,b){ // cities close to the line, in order, with road miles from the start
+  const key=a.n+'|'+b.n;if(townCache.has(key))return townCache.get(key);
+  const A=[a.lat,a.lon],B=[b.lat,b.lon],D=gcd(A,B),t12=brg(A,B),tol=Math.min(40,D*0.08+10),out=[];
+  for(const c of CITY){if(c===a||c===b)continue;const P=[c.lat,c.lon],d13=gcd(A,P);if(d13<1)continue;
+    const th=brg(A,P)-t12,dxt=Math.asin(Math.sin(d13/RE)*Math.sin(th))*RE;if(Math.abs(dxt)>tol||Math.cos(th)<0)continue;
+    const dat=Math.acos(Math.max(-1,Math.min(1,Math.cos(d13/RE)/Math.cos(dxt/RE))))*RE;
+    if(dat<=5||dat>=D-5)continue;out.push({...c,mi:dat*ROAD})}
+  out.sort((p,q)=>p.mi-q.mi);
+  const kept=[];for(const t of out)if(!kept.length||t.mi-kept[kept.length-1].mi>15)kept.push(t);
+  const res=[{...a,mi:0},...kept,{...b,mi:D*ROAD}];townCache.set(key,res);return res;
+}
+function posOn(a,b,mi){const D=routeMiles(a,b)||1,p=interp([a.lat,a.lon],[b.lat,b.lon],Math.max(0,Math.min(1,mi/D)));const[x,y]=xy(p[0],p[1]);return{x,y}}
+function linePts(a,b,f=1){const out=[],N=48;for(let i=0;i<=N;i++){const p=interp([a.lat,a.lon],[b.lat,b.lon],f*i/N),q=xy(p[0],p[1]);out.push(q[0].toFixed(1)+','+q[1].toFixed(1))}return out.join(' ')}
+
+/* ---------- journey state ---------- */
+// S.journey = {a, b (city names), start (lifetime miles when it began), started, ended?}; S.done = recent finished journeys
+function jInfo(){
+  const j=S.journey;if(!j)return null;const a=cityOf(j.a),b=cityOf(j.b);if(!a||!b)return null;
+  const D=routeMiles(a,b),raw=Math.max(0,S.totalMi-j.start);return{a,b,D,prog:Math.min(raw,D),arrived:raw>=D};
+}
+function checkArrival(){
+  const J=jInfo();if(!J||!J.arrived||S.journey.ended)return;
+  S.journey.ended=dayKey();S.done=[{a:J.a.n,b:J.b.n,mi:Math.round(J.D),started:S.journey.started,ended:S.journey.ended},...(S.done||[])].slice(0,20);
+  dirty=true;play('slow');setTimeout(()=>play('slow'),450);renderDone();saveAll();
+}
+
+/* ---------- map ---------- */
+const NS='http://www.w3.org/2000/svg';
+function el(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e}
+let gRoute,gTowns,gPick,othersG,meDot,meLbl;
+const plan={a:null,b:null,step:0,open:false};
+function buildMap(){
+  const svg=$('map');svg.setAttribute('viewBox','0 0 '+MAP.W+' '+MAP.H);
+  const g=el('g',{},svg);for(const k in MAP.states)el('path',{d:MAP.states[k],class:'st'},g);
+  const gc=el('g',{},svg);
+  CITY.forEach(c=>{const d=el('circle',{cx:c.x,cy:c.y,r:2.6,class:'cty'},gc);el('title',{},d).textContent=c.n});
+  othersG=el('g',{},svg);gRoute=el('g',{},svg);gTowns=el('g',{},svg);gPick=el('g',{},svg);
+  meDot=el('circle',{r:9,class:'me'},svg);meLbl=el('text',{class:'ridl','text-anchor':'middle'},svg);meLbl.style.fill='var(--sign)';
+  svg.addEventListener('click',onMapClick);
+  const dl=$('cityList');CITY.forEach(c=>{const o=document.createElement('option');o.value=c.n;dl.append(o)});
+}
+function onMapClick(ev){
+  if(!plan.open)return;
+  const svg=$('map'),pt=svg.createSVGPoint();pt.x=ev.clientX;pt.y=ev.clientY;const p=pt.matrixTransform(svg.getScreenCTM().inverse());
+  let best=null,bd=1e9;for(const c of CITY){const d=Math.hypot(c.x-p.x,c.y-p.y);if(d<bd){bd=d;best=c}}
+  if(!best||bd>45)return;
+  if(plan.step===0){plan.a=best;$('pFrom').value=best.n;if(plan.b===best){plan.b=null;$('pTo').value=''}plan.step=1}
+  else{if(best===plan.a)return;plan.b=best;$('pTo').value=best.n;plan.step=0}
+  renderPlanner();
+}
+function renderPlanner(){
+  $('planner').hidden=!plan.open;
+  $('lFrom').classList.toggle('active',plan.open&&plan.step===0);$('lTo').classList.toggle('active',plan.open&&plan.step===1);
+  $('btnGo').disabled=!(plan.a&&plan.b&&plan.a!==plan.b);
+  $('hint').textContent=!plan.a?'Click a city on the map for your start, then click your destination.':!plan.b?'Now click your destination.':
+    plan.a.n+' to '+plan.b.n+' is about '+comma(routeMiles(plan.a,plan.b))+' miles. Click the map to change '+(plan.step===0?'the start':'the destination')+'.';
+  renderTrip();
+}
+function setSigns(near,nearNote,next,nextMi,dest,destMi){$('nearTxt').textContent=near;$('nearNote').textContent=nearNote;$('nextTxt').textContent=next;$('nextMi').textContent=nextMi;$('destTxt').textContent=dest;$('destMi').textContent=destMi}
+function drawTowns(T,prog){
+  T.forEach(t=>el('circle',{cx:t.x,cy:t.y,r:4,class:'wp'+(prog!==null&&t.mi<=prog?' done':'')},gTowns));
+  // label the ends first, then any town with room around it
+  const order=[0,T.length-1,...T.map((_,i)=>i).slice(1,-1)],placed=[];
+  order.forEach((i,k)=>{const t=T[i];if(k>1&&placed.some(q=>Math.hypot(q.x-t.x,q.y-t.y)<70))return;placed.push(t);
+    const lb=el('text',{x:t.x+12,y:t.y+4,class:'wpl','text-anchor':'start'},gTowns);lb.textContent=t.n.split(',')[0]});
+}
+function renderTrip(){
+  if(!gRoute)return;
+  gRoute.textContent='';gTowns.textContent='';gPick.textContent='';
+  const J=jInfo(),st=S.settings;
+  $('btnNew').hidden=plan.open||!J;
+  if(plan.open){
+    meDot.style.display='none';meLbl.textContent='';$('arrived').hidden=true;
+    const a=plan.a,b=plan.b;
+    if(a&&b){el('polyline',{points:linePts(a,b),class:'pv'},gRoute);drawTowns(towns(a,b),null);
+      const D=routeMiles(a,b);$('jTitle').textContent='Preview · '+a.n+' to '+b.n+' · '+comma(D)+' mi';
+      setSigns(a.n,'Start','—','',b.n,comma(D)+' mi');$('mmLeft').textContent='Mile 0';$('mmPct').textContent='';$('mmTot').textContent=comma(D)+' mi';
+      $('eta').textContent='At '+st.target+' RPM, an hour a day covers this in about '+etaTxt(D)+'.';}
+    else{$('jTitle').textContent='Plan a journey';setSigns('—','','—','',b?b.n:'—','');$('mmLeft').textContent='';$('mmPct').textContent='';$('mmTot').textContent='';$('eta').textContent=''}
+    $('tripBar').style.width='0%';
+    [a,b].forEach((c,i)=>{if(!c)return;el('circle',{cx:c.x,cy:c.y,r:7,class:'pick'},gPick)});
+    renderOthers();return;
+  }
+  if(!J){renderOthers();return}
+  const {a,b,D,prog,arrived}=J,T=towns(a,b),p=posOn(a,b,prog);
+  el('polyline',{points:linePts(a,b),class:'rt'},gRoute);
+  if(prog>0)el('polyline',{points:linePts(a,b,prog/D),class:'rd'},gRoute);
+  drawTowns(T,prog);
+  meDot.style.display='';meDot.setAttribute('cx',p.x);meDot.setAttribute('cy',p.y);
+  meLbl.setAttribute('x',p.x);meLbl.setAttribute('y',p.y-15);meLbl.textContent=famRows.length>1?'You':'';
+  let last=T[0];for(const t of T)if(t.mi<=prog)last=t;const next=T.find(t=>t.mi>prog)||T[T.length-1];
+  $('jTitle').textContent=a.n+' to '+b.n+' · '+comma(D)+' mi';
+  setSigns(last.n,last===T[0]?'Starting point':'Passed at mile '+comma(last.mi),next.n,arrived?'Arrived':fmt1(next.mi-prog)+' mi to go',b.n,arrived?'You made it':comma(D-prog)+' mi to go');
+  $('mmLeft').textContent='Mile '+(prog<100?fmt1(prog):comma(prog));$('mmPct').textContent=(prog/D*100).toFixed(1)+'% of the way';$('mmTot').textContent=comma(D)+' mi';
+  $('tripBar').style.width=(prog/D*100)+'%';
+  $('eta').textContent=arrived?'Plan your next journey to keep going.':'At '+st.target+' RPM, an hour a day gets you there in about '+etaTxt(D-prog)+'.';
+  $('arrived').hidden=!arrived;if(arrived)$('arrived').textContent='You made it to '+b.n+'! That\'s '+comma(D)+' miles from '+a.n+'.';
+  $('btnNew').textContent=arrived?'Plan next journey':'New journey';
+  renderOthers();
+}
+function etaTxt(mi){const perHour=S.settings.target*S.settings.ft*60/5280,days=mi/perHour;return days>60?Math.round(days/30.4)+' months':days>=1.5?Math.ceil(days)+' days':Math.max(1,Math.round(days*60))+' minutes of pedaling'}
+function openPlanner(){const J=jInfo();plan.open=true;plan.a=J?(J.arrived?J.b:J.a):plan.a;plan.b=null;plan.step=plan.a?1:0;
+  $('pFrom').value=plan.a?plan.a.n:'';$('pTo').value='';$('confirmBox').hidden=true;renderPlanner()}
+function startJourney(){
+  if(!plan.a||!plan.b||plan.a===plan.b)return;
+  S.journey={a:plan.a.n,b:plan.b.n,start:S.totalMi,started:dayKey()};plan.open=false;$('confirmBox').hidden=true;dirty=true;
+  renderPlanner();saveAll();
+}
+function renderDone(){const L=S.done||[],ul=$('jDone');ul.textContent='';$('jDoneH').hidden=!L.length;
+  L.forEach(d=>{const li=document.createElement('li'),x=document.createElement('span'),y=document.createElement('span');
+    x.textContent=d.a.split(',')[0]+' → '+d.b.split(',')[0];y.textContent=comma(d.mi)+' mi · '+String(d.ended||'').slice(5).replace('-','/');li.append(x,y);ul.append(li)})}
+
+/* ---------- chart ---------- */
+function renderChart(){
+  const svg=$('chart');svg.textContent='';
+  const W=520,H=170,L=34,B=22,T=10,days=[];
+  for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push({k:dayKey(d),d})}
+  const vals=days.map(x=>(S.days[x.k]||{mi:0}).mi);
+  const maxV=Math.max(1,...vals),step=maxV<=2?0.5:maxV<=5?1:maxV<=12?2:maxV<=25?5:10,top=Math.ceil(maxV/step)*step;
+  const y=v=>T+(H-B-T)*(1-v/top);
+  for(let v=0;v<=top+1e-9;v+=step){el('line',{x1:L,x2:W,y1:y(v),y2:y(v),class:'g'},svg);const t=el('text',{x:L-6,y:y(v)+3,'text-anchor':'end'},svg);t.textContent=step<1?v.toFixed(1):v}
+  const bw=(W-L)/14;
+  days.forEach((x,i)=>{const v=vals[i],h=Math.max(v>0?2:0,(H-B-T)-(y(v)-T));
+    const r=el('rect',{x:L+i*bw+4,y:H-B-h,width:bw-8,height:h,rx:2,class:i===13?'bt':'b'},svg);
+    const tt=el('title',{},r);tt.textContent=x.k+': '+fmt1(v)+' mi';
+    if(i%2===1||i===13){const t=el('text',{x:L+i*bw+bw/2,y:H-6,'text-anchor':'middle'},svg);t.textContent=i===13?'today':(x.d.getMonth()+1)+'/'+x.d.getDate()}
+  });
+  $('minNote').textContent='Pedaling time today: '+Math.round(today().min)+' min.';
+}
+
+/* ---------- family (shared db) ---------- */
+function myRiderDoc(){
+  const J=jInfo();
+  return {nick:S.settings.nick.trim(),totalMi:Math.round(S.totalMi*10)/10,weekMi:Math.round(weekMi()*10)/10,weekKey:dayKey(weekStart()),todayMi:Math.round(today().mi*10)/10,dayKey:dayKey(),jA:J?J.a.n:'',jB:J?J.b.n:'',jProg:J?Math.round(J.prog*10)/10:0,updatedAt:Date.now()};
+}
+let riderUnsub=null,lastRiderJson='';
+async function pushRider(){
+  if(!db||!uid||S.settings.mode!=='together')return;
+  const d=myRiderDoc(),j=JSON.stringify({...d,updatedAt:0});if(j===lastRiderJson)return;
+  try{await db.doc('riders/'+uid).set(d);lastRiderJson=j}catch(e){}
+}
+function subscribeRiders(){
+  if(!db||riderUnsub)return;
+  riderUnsub=db.collection('riders').onSnapshot(snap=>{riders=snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}));renderFamily()},()=>{});
+}
+async function setMode(m){
+  S.settings.mode=m;dirty=true;
+  $('modeSep').setAttribute('aria-pressed',m==='separate');$('modeTog').setAttribute('aria-pressed',m==='together');
+  if(m==='together'){lastRiderJson='';await pushRider();subscribeRiders()}
+  else{if(riderUnsub){riderUnsub();riderUnsub=null}riders=[];if(db&&uid){try{await db.doc('riders/'+uid).delete()}catch(e){}}}
+  renderFamily();renderTrip();saveAll();
+}
+const OTHER_COLORS=['var(--other)','#c2410c','#7c3aed','#0e7490','#a16207'];
+async function renderFamily(){
+  const tog=S.settings.mode==='together';
+  if(!db){$('famNote').textContent='Family sharing works when this page is opened from your Claude link. Here, your miles are saved in this browser only.';$('famTable').hidden=true;return}
+  if(!tog){$('famNote').textContent='Your stats stay private. Switch to Ride together to share your miles and see everyone on the map.';$('famTable').hidden=true;return}
+  const others=riders.filter(r=>r.id!==uid);
+  $('famNote').textContent=others.length?'Everyone who chose Ride together shows up here and on the map.':'Sharing on. When your son opens his copy of this link and picks Ride together, he\'ll appear here.';
+  const ids=riders.map(r=>r.id);let ps={};try{if(userCap&&ids.length)ps=await userCap.profiles(ids)}catch(e){}
+  const wk=dayKey(weekStart()),dk=dayKey();
+  const rows=riders.map(r=>({...r,isMe:r.id===uid,name:(r.id===uid?S.settings.nick.trim():r.nick)||(ps[r.id]&&ps[r.id].name)||'Rider',
+    week:r.id===uid?weekMi():(r.weekKey===wk?r.weekMi:0),day:r.id===uid?today().mi:(r.dayKey===dk?r.todayMi:0),total:r.id===uid?S.totalMi:r.totalMi}))
+    .sort((a,b)=>b.week-a.week);
+  const body=$('famBody');body.textContent='';let ci=0;
+  rows.forEach(r=>{r.color=r.isMe?'var(--sign)':OTHER_COLORS[ci++%OTHER_COLORS.length];
+    const tr=document.createElement('tr');if(r.isMe)tr.className='me';
+    const td0=document.createElement('td');const dot=document.createElement('span');dot.className='dot';dot.style.background=r.color;td0.append(dot,document.createTextNode(r.name));tr.append(td0);
+    [fmt1(r.day),fmt1(r.week),comma(r.total)].forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.append(td)});body.append(tr)});
+  $('famTable').hidden=!rows.length;
+  famRows=rows;renderOthers();
+}
+let famRows=[];
+function renderOthers(){
+  if(!othersG)return;othersG.textContent='';
+  if(S.settings.mode!=='together')return;
+  famRows.filter(r=>!r.isMe).forEach(r=>{const a=cityOf(r.jA),b=cityOf(r.jB);if(!a||!b)return;
+    const D=routeMiles(a,b),pr=Math.min(D,r.jProg||0),p=posOn(a,b,pr);
+    const ln=el('polyline',{points:linePts(a,b),class:'orl'},othersG);ln.style.stroke=r.color;
+    const c=el('circle',{cx:p.x,cy:p.y,r:8,class:'oth'},othersG);c.style.fill=r.color;
+    const t=el('text',{x:p.x,y:p.y+24,class:'ridl','text-anchor':'middle'},othersG);t.style.fill=r.color;t.textContent=r.name+' → '+b.n.split(',')[0]});
+}
+
+/* ---------- persistence ---------- */
+let saving=false;
+async function saveAll(){
+  pruneDays();saveLocal();
+  if(db&&uid&&!saving){saving=true;try{await db.doc('data/users/'+uid+'/stats').set(JSON.parse(JSON.stringify(S)))}catch(e){}saving=false}
+  pushRider();dirty=false;
+}
+setInterval(()=>{if(dirty)saveAll()},30000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&dirty)saveAll()});
+setInterval(renderChart,60000);
+
+async function initCloud(){
+  if(!window.claude||!window.claude.use)return;
+  try{
+    const [d,u]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);
+    userCap=u;if(!d||!u)return;uid=await u.id();if(!uid)return;db=d;
+    const snap=await db.doc('data/users/'+uid+'/stats').get();
+    if(snap.exists){const o=snap.data();
+      // keep whichever record has more miles (covers riding before the cloud answered)
+      if((o.totalMi||0)>=S.totalMi){S={settings:{...DEFAULTS,...o.settings},totalMi:o.totalMi||0,days:JSON.parse(JSON.stringify(o.days||{})),journey:o.journey?{...o.journey}:null,done:JSON.parse(JSON.stringify(o.done||[]))}}
+    }else{await saveAll()}
+    applySettingsToForm();
+    if(S.settings.mode==='together'){subscribeRiders();pushRider()}
+    renderAll();
+  }catch(e){}
+}
+
+/* ---------- settings form ---------- */
+const FIELDS={sTarget:'target',sGrace:'grace',sFt:'ft',sAway:'away',sSound:'sound',sVol:'vol',sNick:'nick'};
+function applySettingsToForm(){for(const id in FIELDS)$(id).value=S.settings[FIELDS[id]];setModeButtons()}
+function setModeButtons(){const m=S.settings.mode;$('modeSep').setAttribute('aria-pressed',m==='separate');$('modeTog').setAttribute('aria-pressed',m==='together')}
+for(const id in FIELDS){$(id).addEventListener('change',()=>{const k=FIELDS[id];let v=$(id).value;
+  if(['target','grace','ft','away','vol'].includes(k)){v=parseFloat(v);const e=$(id);if(isNaN(v))v=DEFAULTS[k];v=Math.max(+e.min,Math.min(+e.max,v));e.value=v}
+  S.settings[k]=v;dirty=true;renderAll();if(k==='nick')renderFamily();saveAll()})}
+
+function renderAll(){if(!S.journey&&!plan.open)openPlannerDefault();renderPlanner();renderLive();renderChart();renderFamily();renderDone()}
+
+/* ---------- wire up ---------- */
+$('btnConnect').addEventListener('click',connect);
+$('btnPause').addEventListener('click',()=>{live.paused=!live.paused;$('btnPause').textContent=live.paused?'Resume alerts':'Pause alerts';$('btnPause').setAttribute('aria-pressed',live.paused)});
+$('simOn').addEventListener('change',e=>setSim(e.target.checked));
+$('simRpm').addEventListener('input',e=>{live.simRpm=+e.target.value;$('simVal').textContent=live.simRpm+' RPM'});
+$('modeSep').addEventListener('click',()=>setMode('separate'));
+$('modeTog').addEventListener('click',()=>setMode('together'));
+$('btnSwap').addEventListener('click',()=>{[plan.a,plan.b]=[plan.b,plan.a];$('pFrom').value=plan.a?plan.a.n:'';$('pTo').value=plan.b?plan.b.n:'';renderPlanner()});
+$('btnGo').addEventListener('click',startJourney);
+$('btnNew').addEventListener('click',()=>{const J=jInfo();
+  if(J&&!J.arrived){$('confirmTxt').textContent='You\'re '+comma(J.prog)+' of '+comma(J.D)+' miles into '+J.a.n.split(',')[0]+' to '+J.b.n.split(',')[0]+'. A new journey ends this one; your miles stay in the logbook.';$('confirmBox').hidden=false}
+  else openPlanner()});
+$('cfYes').addEventListener('click',openPlanner);
+$('cfNo').addEventListener('click',()=>{$('confirmBox').hidden=true});
+['pFrom','pTo'].forEach((id,i)=>{
+  $(id).addEventListener('change',()=>{const c=cityOf($(id).value.trim());if(i===0)plan.a=c;else plan.b=c;if(!c)$(id).value='';plan.step=i===0?1:0;renderPlanner()});
+  $(id).addEventListener('focus',()=>{plan.step=i;renderPlanner()})});
+function openPlannerDefault(){plan.open=true;if(!plan.a){plan.a=byName.get('san francisco, ca');plan.b=byName.get('new york, ny');$('pFrom').value=plan.a.n;$('pTo').value=plan.b.n;plan.step=0}}
+
+$('tSlow').addEventListener('click',()=>play('slow'));$('tStop').addEventListener('click',()=>play('stop'));
+
+loadLocal();buildMap();applySettingsToForm();renderAll();
+setInterval(tick,1000);
+initCloud();
+</script>
