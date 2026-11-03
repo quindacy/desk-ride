@@ -22,14 +22,19 @@ A desk-bike companion app for Dan and his son. Each of them has a Magene S3+ cad
 
 The artifact viewer blocks outside images (so Mapillary photos can't show) and probably blocks Web Bluetooth. A hosted page (GitHub Pages) fixes both.
 
+## Status (2026-11-02)
+
+- Repo `quindacy/desk-ride` (public, so GitHub Pages works on the Free plan). Live at https://quindacy.github.io/desk-ride/ (root redirects to `app/`).
+- `frames/*.json` are built and committed. The app loads them from `../frames/` and `../routes/routes.json`.
+- Scenic routes mode is in the app: route picker next to the two-cities planner; street-photo player (one photo per 0.1 mi, crossfade, holds through gaps, preloads 5 ahead); highway-style landmark signs over the photo and beside the map; Mapillary attribution per photo. Image URLs are fetched at play time.
+- The Mapillary token for the app is entered in Settings and kept in that browser's localStorage only (`desk-ride-mly`). It is a client token and is visible to the browser by design; never commit it.
+- `build-frames.mjs` grades photos by camera pitch/roll (from `computed_rotation`) and `quality_score`: good ones win, so-so ones (pitch up to 32°, quality ≥ 0.25) fill in only when nothing better is near, bad ones are never used.
+
 ## Next steps
 
-1. Set up the repo, run `build-frames.mjs`, and commit `frames/*.json`.
-2. Host on GitHub Pages and confirm Web Bluetooth works with the Magene sensor in Chrome or Edge.
-3. Add the scenic-route mode with a street-view player. It shows the frame for the rider's current 0.1 mi, crossfades between frames, holds the last frame through gaps, and preloads a few frames ahead. Image URLs come from `graph.mapillary.com/<id>?fields=thumb_1024_url` and expire, so fetch them at play time rather than storing them. Show Mapillary attribution.
-4. Filter out tilted or low-quality photos (one Big Sur frame pointed at the sky). Candidates: `quality_score`, camera pitch, or a quick image-brightness check.
-5. Replace the Claude artifact family sharing with a small backend, such as a Firebase or Supabase free tier.
-6. Optional: real road routing for the pick-two-cities mode (OSRM) instead of straight lines.
+1. Confirm Web Bluetooth works with the Magene sensor in Chrome or Edge, and check the player with a real Mapillary token.
+2. Replace the Claude artifact family sharing with a small backend, such as a Firebase or Supabase free tier.
+3. Optional: real road routing for the pick-two-cities mode (OSRM) instead of straight lines.
 
 ## Preferences
 

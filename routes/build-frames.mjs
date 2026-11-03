@@ -1,5 +1,7 @@
 // Builds the photo list for each route in routes.json.
-// For every 0.1 mile of road it picks the newest Mapillary photo facing the direction of travel.
+// For every 0.1 mile of road it picks the newest good Mapillary photo facing the direction of travel.
+// Photos are graded by camera pitch/roll (from computed_rotation) and quality_score: good ones win, so-so ones
+// (dashcam aimed high) are used only when nothing better is there, and bad ones (sky, glare, tilted) are never used.
 //
 //   MAPILLARY_TOKEN="MLY|..." node build-frames.mjs            (all routes)
 //   MAPILLARY_TOKEN="MLY|..." node build-frames.mjs big-sur    (one route)
@@ -20,6 +22,26 @@ const hav = (a, b) => { const dp = rad(b[0] - a[0]), dl = rad(b[1] - a[1]); cons
 const brg = (a, b) => { const p1 = rad(a[0]), p2 = rad(b[0]), dl = rad(b[1] - a[1]); return (Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) * 180 / Math.PI + 360) % 360; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// computed_rotation is an axis-angle world->camera rotation (OpenSfM: camera x right, y down, z forward; world z up).
+// Rows of the rotation matrix are the camera axes in world coordinates.
+function attitude(v, exif) {
+  const th = Math.hypot(...v); if (!th) return null;
+  const [x, y, z] = v.map(a => a / th), c = Math.cos(th), s = Math.sin(th), C = 1 - c;
+  const right = [c + x * x * C, x * y * C - z * s, x * z * C + y * s], down = [y * x * C + z * s, c + y * y * C, y * z * C - x * s], fwd = [z * x * C - y * s, z * y * C + x * s, c + z * z * C];
+  const pitch = Math.asin(Math.max(-1, Math.min(1, fwd[2]))) * 180 / Math.PI;      // + = looking up
+  let roll = Math.atan2(right[2], -down[2]) * 180 / Math.PI;
+  if (exif === 3) roll = ((roll + 360) % 360) - 180;                                // stored upside down, shown upright
+  return { pitch, roll };
+}
+// 0 = good, 1 = acceptable when nothing better, 2 = never use
+function grade(x) {
+  const q = x.quality_score, a = x.computed_rotation ? attitude(x.computed_rotation, x.exif_orientation) : null;
+  if (x.is_pano) return q != null && q < 0.25 ? 2 : 1;
+  if ((q != null && q < 0.25) || (a && (a.pitch > 32 || a.pitch < -30 || Math.abs(a.roll) > 30))) return 2;
+  if ((q != null && q < 0.4) || !a || a.pitch > 18 || Math.abs(a.roll) > 15) return 1;
+  return 0;
+}
+
 async function road(waypoints) {
   const q = waypoints.map(w => `${w.lon},${w.lat}`).join(';');
   const j = await (await fetch(`https://router.project-osrm.org/route/v1/driving/${q}?overview=full&geometries=geojson`)).json();
@@ -38,16 +60,16 @@ function sample(coords) {
 }
 
 async function photoAt(p, maxDeg, radius) {
-  const url = `https://graph.mapillary.com/images?access_token=${encodeURIComponent(TOKEN)}&fields=id,computed_compass_angle,compass_angle,captured_at,is_pano&lat=${p.lat.toFixed(6)}&lng=${p.lon.toFixed(6)}&radius=${radius}&limit=50`;
+  const url = `https://graph.mapillary.com/images?access_token=${encodeURIComponent(TOKEN)}&fields=id,computed_compass_angle,compass_angle,captured_at,is_pano,quality_score,computed_rotation,exif_orientation&lat=${p.lat.toFixed(6)}&lng=${p.lon.toFixed(6)}&radius=${radius}&limit=50`;
   for (let tries = 0; tries < 3; tries++) {
     try {
       const r = await fetch(url);
       if (r.status === 429) { await sleep(1500); continue; }
       const j = await r.json();
-      const c = (j.data || []).map(x => { const a = x.computed_compass_angle ?? x.compass_angle; return { ...x, diff: a == null ? 180 : Math.abs(((a - p.h) + 540) % 360 - 180) }; })
-        .filter(x => x.is_pano || x.diff <= maxDeg);
+      const c = (j.data || []).map(x => { const a = x.computed_compass_angle ?? x.compass_angle; return { ...x, diff: a == null ? 180 : Math.abs(((a - p.h) + 540) % 360 - 180), grade: grade(x) }; })
+        .filter(x => (x.is_pano || x.diff <= maxDeg) && x.grade < 2);
       if (!c.length) return null;
-      c.sort((a, b) => (b.captured_at || 0) - (a.captured_at || 0));
+      c.sort((a, b) => a.grade - b.grade || (b.captured_at || 0) - (a.captured_at || 0));
       return c[0];
     } catch { await sleep(800); }
   }
@@ -70,7 +92,8 @@ async function build(route) {
     miles: +(S.length * STEP / MI).toFixed(1),
     percent: +(res.filter(Boolean).length / res.length * 100).toFixed(1),
     longestGapMi: +(longest * STEP / MI).toFixed(1),
-    medianPhotoYear: years[years.length >> 1]
+    medianPhotoYear: years[years.length >> 1],
+    soSoPhotos: res.filter(r => r && r.grade === 1).length
   };
   const path = S.filter((_, k) => k % 5 === 0).map(p => [+p.lat.toFixed(5), +p.lon.toFixed(5)]);
   await mkdir('frames', { recursive: true });
