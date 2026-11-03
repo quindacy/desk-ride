@@ -304,21 +304,33 @@ function play(kind){const s=S.settings.sound;
   seq.forEach(([f,t])=>tone(f,t,dur,type,gain))}
 
 /* ---------- Bluetooth cadence (CSC 0x1816 / 0x2A5B) ---------- */
-let btDev=null;
+let btDev=null,attaching=false;
 function showMsg(t){$('msg').textContent=t;$('msg').hidden=!t}
 async function connect(){
   audio();
   if(!navigator.bluetooth){showMsg("This browser can't reach Bluetooth sensors. Use Chrome or Edge on a computer with Bluetooth turned on.");return}
   try{
-    btDev=await navigator.bluetooth.requestDevice({filters:[{services:['cycling_speed_and_cadence']}]});
-    btDev.addEventListener('gattserverdisconnected',()=>{setConn(false,'Disconnected');setTimeout(reconnect,2000)});
-    await attach();
+    const dev=await navigator.bluetooth.requestDevice({filters:[{services:['cycling_speed_and_cadence']}]});
+    if(dev!==btDev){btDev=dev;btDev.addEventListener('gattserverdisconnected',()=>{setConn(false,'Disconnected');if(!attaching)setTimeout(reconnect,2000)})}
+    setConn(false,'Connecting…');
+    await attachRetry();
     showMsg('');
   }catch(e){
     if(e&&e.name==='NotFoundError')return; // picker closed
     if(e&&(e.name==='SecurityError'||e.name==='NotAllowedError')){showMsg("This window doesn't allow Bluetooth. Open the standalone copy of this page in Chrome or Edge to connect your sensor.");return}
-    showMsg("Couldn't connect to the sensor: "+(e&&e.message||e)+". Make sure it's in cadence mode and awake (spin the pedals), then try again.");
+    setConn(false,'Not connected');
+    showMsg("The sensor connected and then dropped ("+(e&&e.message||e)+"). Keep spinning the pedals while you connect so it stays awake. On Windows, if the sensor shows as \"Paired\" in the list, remove it under Settings → Bluetooth & devices, then try again.");
   }
+}
+// The GATT link often drops right after connecting (sensor dozing, or Windows holding an OS pairing), so try a few times.
+async function attachRetry(){
+  attaching=true;let err;
+  try{
+    for(let i=0;i<4;i++){
+      try{await attach();return}catch(e){err=e;try{btDev.gatt.disconnect()}catch(_){}await new Promise(r=>setTimeout(r,700*(i+1)))}
+    }
+    throw err;
+  }finally{attaching=false}
 }
 async function attach(){
   const srv=await btDev.gatt.connect();
@@ -330,7 +342,7 @@ async function attach(){
   setConn(true,btDev.name||'Sensor connected');
   if(live.sim){$('simOn').checked=false;setSim(false)}
 }
-async function reconnect(){if(!btDev||btDev.gatt.connected)return;try{await attach()}catch(e){setTimeout(reconnect,5000)}}
+async function reconnect(){if(!btDev||btDev.gatt.connected||attaching)return;try{await attachRetry()}catch(e){setTimeout(reconnect,5000)}}
 function onCsc(dv){
   const flags=dv.getUint8(0);let i=1;
   if(flags&1)i+=6;            // wheel data present: skip uint32 revs + uint16 time
