@@ -165,6 +165,7 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
   </header>
 
   <div class="msg" id="msg" hidden></div>
+  <details class="panel" id="btLogBox" hidden><summary class="note" style="cursor:pointer;font-weight:700">Sensor connection details</summary><pre id="btLog" style="margin:10px 0 0;font-family:var(--mono);font-size:12px;white-space:pre-wrap;user-select:all"></pre></details>
 
   <section class="panel" aria-label="Live ride">
     <div class="live">
@@ -304,19 +305,23 @@ function play(kind){const s=S.settings.sound;
   seq.forEach(([f,t])=>tone(f,t,dur,type,gain))}
 
 /* ---------- Bluetooth cadence (CSC 0x1816 / 0x2A5B) ---------- */
-let btDev=null,attaching=false;
+let btDev=null,attaching=false,btT0=0;
 function showMsg(t){$('msg').textContent=t;$('msg').hidden=!t}
+// step-by-step log so a failed connection can be diagnosed from what the rider sees
+function btLog(s){const t=btT0?((performance.now()-btT0)/1000).toFixed(1)+'s ':'';$('btLog').textContent+=t+s+'\n';$('btLogBox').hidden=false}
 async function connect(){
   audio();
   if(!navigator.bluetooth){showMsg("This browser can't reach Bluetooth sensors. Use Chrome or Edge on a computer with Bluetooth turned on.");return}
   try{
+    $('btLog').textContent='';btT0=0;btLog(navigator.userAgent);
     const dev=await navigator.bluetooth.requestDevice({filters:[{services:['cycling_speed_and_cadence']}]});
-    if(dev!==btDev){btDev=dev;btDev.addEventListener('gattserverdisconnected',()=>{setConn(false,'Disconnected');if(!attaching)setTimeout(reconnect,2000)})}
+    btT0=performance.now();btLog('Picked "'+(dev.name||'?')+'"'+(dev===btDev?' (same as before)':''));
+    if(dev!==btDev){btDev=dev;btDev.addEventListener('gattserverdisconnected',()=>{btLog('Sensor disconnected');setConn(false,'Disconnected');if(!attaching)setTimeout(reconnect,2000)})}
     setConn(false,'Connecting…');
     await attachRetry();
     showMsg('');
   }catch(e){
-    if(e&&e.name==='NotFoundError')return; // picker closed
+    if(e&&e.name==='NotFoundError'){btLog('Picker closed');return}
     if(e&&(e.name==='SecurityError'||e.name==='NotAllowedError')){showMsg("This window doesn't allow Bluetooth. Open the standalone copy of this page in Chrome or Edge to connect your sensor.");return}
     setConn(false,'Not connected');
     showMsg("The sensor connected and then dropped ("+(e&&e.message||e)+"). Keep spinning the pedals while you connect so it stays awake. On Windows, if the sensor shows as \"Paired\" in the list, remove it under Settings → Bluetooth & devices, then try again.");
@@ -327,17 +332,18 @@ async function attachRetry(){
   attaching=true;let err;
   try{
     for(let i=0;i<4;i++){
-      try{await attach();return}catch(e){err=e;try{btDev.gatt.disconnect()}catch(_){}await new Promise(r=>setTimeout(r,700*(i+1)))}
+      try{btLog('Attempt '+(i+1));await attach();btLog('Connected and listening');return}
+      catch(e){err=e;btLog('Failed: '+(e&&e.name)+': '+(e&&e.message||e));try{btDev.gatt.disconnect()}catch(_){}await new Promise(r=>setTimeout(r,700*(i+1)))}
     }
     throw err;
   }finally{attaching=false}
 }
 async function attach(){
-  const srv=await btDev.gatt.connect();
-  const svc=await srv.getPrimaryService('cycling_speed_and_cadence');
-  const ch=await svc.getCharacteristic('csc_measurement');
+  const srv=await btDev.gatt.connect();btLog('  link up (connected='+btDev.gatt.connected+')');
+  const svc=await srv.getPrimaryService('cycling_speed_and_cadence');btLog('  found cadence service');
+  const ch=await svc.getCharacteristic('csc_measurement');btLog('  found measurement');
   ch.addEventListener('characteristicvaluechanged',ev=>onCsc(ev.target.value));
-  await ch.startNotifications();
+  await ch.startNotifications();btLog('  notifications on');
   live.revs=null;live.lastEvt=null;
   setConn(true,btDev.name||'Sensor connected');
   if(live.sim){$('simOn').checked=false;setSim(false)}
@@ -345,6 +351,7 @@ async function attach(){
 async function reconnect(){if(!btDev||btDev.gatt.connected||attaching)return;try{await attachRetry()}catch(e){setTimeout(reconnect,5000)}}
 function onCsc(dv){
   const flags=dv.getUint8(0);let i=1;
+  if(!btDev.gotData){btDev.gotData=true;btLog('First reading from sensor: '+(flags&2?'cadence':'')+(flags&1?' speed':'')+' (flags '+flags+')')}
   if(flags&1)i+=6;            // wheel data present: skip uint32 revs + uint16 time
   if(!(flags&2)){showMsg('The sensor is sending speed, not cadence. Switch it to cadence mode (see its instructions) and reconnect.');return}
   const revs=dv.getUint16(i,true), evt=dv.getUint16(i+2,true);
