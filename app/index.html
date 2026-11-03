@@ -118,9 +118,39 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
 .form input[type=number],.form input[type=text],.form select{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
 .form input[type=range]{accent-color:var(--sign)}
 .msg{font-size:14px;padding:10px 12px;border-radius:8px;background:var(--warn-bg);color:var(--warn)}
-@media (max-width:860px){.live{grid-template-columns:1fr 1fr}.gauge{grid-column:1/-1}.stat:nth-of-type(2){border-left:0;padding-left:0}.mapgrid,.lower{grid-template-columns:1fr}}
+/* scenic routes */
+.routes{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.rcard{border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:6px;background:var(--bg)}
+.rcard h3{margin:0;font-size:19px;font-weight:800;line-height:1.2}
+.rcard p{margin:0;font-size:14px;color:var(--muted)}
+.rcard .facts{font-family:var(--mono);font-size:13px}
+.rcard .btn{align-self:flex-start;margin-top:auto}
+.scene{margin-bottom:16px}
+.photo{position:relative;width:100%;aspect-ratio:16/9;max-height:62vh;background:#0b0f0d;border-radius:10px;overflow:hidden}
+.photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .8s ease}
+.photo img.on{opacity:1}
+.phmsg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;color:#e7eeea;font-size:16px;font-weight:600;background:rgba(11,15,13,.7)}
+.phmsg:empty{display:none}
+.phsign{position:absolute;top:12px;right:12px;max-width:min(320px,60%)}
+.phmile,.attr{position:absolute;bottom:8px;font-size:12px;color:#fff;background:rgba(0,0,0,.55);padding:3px 8px;border-radius:4px}
+.phmile{left:8px;font-family:var(--mono)}
+.attr{right:8px;text-decoration:none}
+.attr:hover{text-decoration:underline}
+.attr:empty{display:none}
+.mapgrid.scenic{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.zoomed .st,.zoomed .rt,.zoomed .rd,.zoomed .orl,.zoomed .wp,.zoomed .me,.zoomed .oth{vector-effect:non-scaling-stroke}
+.zoomed .st{stroke-width:1}.zoomed .rt{stroke-width:3}.zoomed .rd{stroke-width:4}
+.zoomed .cty{display:none}
+.lmlist{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:14px;max-height:280px;overflow:auto}
+.lmlist li{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.lmlist li small{display:block;color:var(--muted);font-weight:400}
+.lmlist li > span:last-child{font-family:var(--mono);color:var(--muted);white-space:nowrap}
+.lmlist li.passed{color:var(--muted)}
+.lmlist li.passed > span:first-child::before{content:"✓ ";color:var(--done);font-weight:800}
+.lmlist li.next{font-weight:800}
+@media (max-width:860px){.live{grid-template-columns:1fr 1fr}.gauge{grid-column:1/-1}.stat:nth-of-type(2){border-left:0;padding-left:0}.mapgrid,.mapgrid.scenic,.lower{grid-template-columns:1fr}}
 @media (max-width:420px){.rpm{font-size:52px}.stat .v{font-size:24px}.totals .v{font-size:20px}.wpl{display:none}}
-@media (prefers-reduced-motion:reduce){.bar b{transition:none}}
+@media (prefers-reduced-motion:reduce){.bar b,.photo img{transition:none}}
 </style>
 
 <div class="wrap">
@@ -157,6 +187,8 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
   <section class="panel map" aria-label="Journey">
     <div class="confirm" id="confirmBox" hidden><span id="confirmTxt"></span><button class="btn" id="cfYes" type="button">Start new journey</button><button class="btn" id="cfNo" type="button">Keep riding</button></div>
     <div class="arrived" id="arrived" hidden></div>
+    <div class="seg" role="group" aria-label="Kind of journey" id="planKind"><button id="kCities" type="button" aria-pressed="true">Pick two cities</button><button id="kScenic" type="button" aria-pressed="false">Scenic routes</button></div>
+    <div class="routes" id="routeList" hidden></div>
     <div class="planner" id="planner">
       <label for="pFrom" id="lFrom">Start<input id="pFrom" list="cityList" autocomplete="off" placeholder="Click the map or type a city"></label>
       <label for="pTo" id="lTo">Destination<input id="pTo" list="cityList" autocomplete="off" placeholder="Click the map or type a city"></label>
@@ -165,7 +197,16 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
       <div class="hint" id="hint">Click a city on the map for your start, then click your destination.</div>
     </div>
     <datalist id="cityList"></datalist>
-    <div class="mapgrid">
+    <div class="scene" id="scene" hidden>
+      <div class="photo">
+        <img id="ph0" alt=""><img id="ph1" alt="">
+        <div class="phmsg" id="phMsg"></div>
+        <div class="hwsign phsign" id="phSign" hidden><div class="k" id="phSignK"></div><div class="t" id="phSignT"></div><div class="d" id="phSignD"></div></div>
+        <span class="phmile" id="phMile"></span>
+        <a class="attr" id="phAttr" target="_blank" rel="noopener"></a>
+      </div>
+    </div>
+    <div class="mapgrid" id="mapgrid">
       <div>
         <h2 id="jTitle">Plan a journey</h2>
         <svg id="map" role="img" aria-label="Map of the United States with your journey"></svg>
@@ -173,10 +214,12 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
         <div class="bar" style="margin-top:6px"><b id="tripBar" style="width:0%"></b></div>
       </div>
       <div class="signs">
-        <div class="hwsign"><div class="k">You are near</div><div class="t" id="nearTxt">—</div><div class="d" id="nearNote"></div></div>
-        <div class="hwsign"><div class="k">Next stop</div><div class="t" id="nextTxt">—</div><div class="d" id="nextMi"></div></div>
-        <div class="hwsign"><div class="k">Destination</div><div class="t" id="destTxt">—</div><div class="d" id="destMi"></div></div>
+        <div class="hwsign"><div class="k" id="nearK">You are near</div><div class="t" id="nearTxt">—</div><div class="d" id="nearNote"></div></div>
+        <div class="hwsign"><div class="k" id="nextK">Next stop</div><div class="t" id="nextTxt">—</div><div class="d" id="nextMi"></div></div>
+        <div class="hwsign"><div class="k" id="destK">Destination</div><div class="t" id="destTxt">—</div><div class="d" id="destMi"></div></div>
         <div class="note" id="eta"></div>
+        <h2 id="lmH" style="margin:4px 0 0" hidden>Landmarks</h2>
+        <ul class="lmlist" id="lmList" hidden></ul>
         <button class="btn" id="btnNew" type="button" hidden>New journey</button>
       </div>
     </div>
@@ -221,6 +264,7 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
         <label for="sSound">Alert sound<select id="sSound"><option value="chime">Chime</option><option value="beep">Beep</option><option value="block">Woodblock</option></select></label>
         <label for="sVol">Volume<input type="range" id="sVol" min="0" max="1" step="0.05"></label>
         <label for="sNick">Your name on the leaderboard<input type="text" id="sNick" maxlength="24" placeholder="e.g. Dad"></label>
+        <label for="sMly">Mapillary access token<span>Needed for street photos on scenic routes. Saved in this browser only.</span><input type="password" id="sMly" autocomplete="off" spellcheck="false" placeholder="MLY|…"></label>
         <label>Test sounds<span style="display:flex;gap:8px;margin-top:2px"><button class="btn" id="tSlow" type="button">Slowing down</button><button class="btn" id="tStop" type="button">Stopped</button></span></label>
       </div>
     </details>
@@ -384,22 +428,126 @@ function posOn(a,b,mi){const D=routeMiles(a,b)||1,p=interp([a.lat,a.lon],[b.lat,
 function linePts(a,b,f=1){const out=[],N=48;for(let i=0;i<=N;i++){const p=interp([a.lat,a.lon],[b.lat,b.lon],f*i/N),q=xy(p[0],p[1]);out.push(q[0].toFixed(1)+','+q[1].toFixed(1))}return out.join(' ')}
 
 /* ---------- journey state ---------- */
-// S.journey = {a, b (city names), start (lifetime miles when it began), started, ended?}; S.done = recent finished journeys
+// S.journey = {a, b (city names) | route (scenic route id), start (lifetime miles when it began), started, ended?}; S.done = recent finished journeys
 function jInfo(){
-  const j=S.journey;if(!j)return null;const a=cityOf(j.a),b=cityOf(j.b);if(!a||!b)return null;
-  const D=routeMiles(a,b),raw=Math.max(0,S.totalMi-j.start);return{a,b,D,prog:Math.min(raw,D),arrived:raw>=D};
+  const j=S.journey;if(!j)return null;const raw=Math.max(0,S.totalMi-j.start);
+  if(j.route){const r=SC.byId.get(j.route);if(!r)return null;return{scenic:true,r,a:r.a,b:r.b,D:r.D,prog:Math.min(raw,r.D),arrived:raw>=r.D,label:r.name}}
+  const a=cityOf(j.a),b=cityOf(j.b);if(!a||!b)return null;
+  const D=routeMiles(a,b);return{a,b,D,prog:Math.min(raw,D),arrived:raw>=D,label:a.n.split(',')[0]+' to '+b.n.split(',')[0]};
 }
 function checkArrival(){
   const J=jInfo();if(!J||!J.arrived||S.journey.ended)return;
-  S.journey.ended=dayKey();S.done=[{a:J.a.n,b:J.b.n,mi:Math.round(J.D),started:S.journey.started,ended:S.journey.ended},...(S.done||[])].slice(0,20);
+  S.journey.ended=dayKey();S.done=[{a:J.scenic?J.r.name:J.a.n,b:J.scenic?'':J.b.n,mi:Math.round(J.D),started:S.journey.started,ended:S.journey.ended},...(S.done||[])].slice(0,20);
   dirty=true;play('slow');setTimeout(()=>play('slow'),450);renderDone();saveAll();
+}
+
+/* ---------- scenic routes ---------- */
+// routes.json has the route details and landmarks; frames/<id>.json has one Mapillary image id per 0.1 mi (0 = no photo)
+const SC={routes:[],byId:new Map(),ready:false};
+async function loadScenic(){
+  try{
+    const {routes}=await (await fetch('../routes/routes.json')).json();
+    await Promise.all(routes.map(async r=>{try{prepRoute(r,await (await fetch('../frames/'+r.id+'.json')).json())}catch(e){}}));
+    SC.routes=routes.filter(r=>r.frames);SC.routes.forEach(r=>SC.byId.set(r.id,r));
+  }catch(e){}
+  SC.ready=true;renderAll();
+}
+function prepRoute(r,f){
+  const n=f.frames.length;
+  r.frames=f.frames;r.stepMi=f.step/1609.34;r.D=n*r.stepMi;r.pathStep=r.stepMi*5;   // path keeps every 5th sample
+  r.coverage=f.frames.filter(Boolean).length/n*100;
+  const first=f.frames.find(Boolean)||0;let last=0;
+  r.hold=f.frames.map(id=>id?(last=id):(last||first));   // the photo to show at each step: hold the last one through gaps
+  const k=r.D/(r.miles||r.D);r.marks=(r.landmarks||[]).map(l=>({...l,mi:Math.min(r.D,l.mi*k)}));
+  r.pts=f.path.map(p=>xy(p[0],p[1]));
+  r.fullPts=r.pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const A=r.waypoints[0],B=r.waypoints[r.waypoints.length-1],pe=r.pts[r.pts.length-1];
+  r.a={n:A.name,lat:A.lat,lon:A.lon,x:r.pts[0][0],y:r.pts[0][1]};r.b={n:B.name,lat:B.lat,lon:B.lon,x:pe[0],y:pe[1]};
+  // zoomed map window around the route, padded, 4:3
+  const xs=r.pts.map(p=>p[0]),ys=r.pts.map(p=>p[1]);
+  let x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys),w=Math.max(x1-x0,8)*1.3,h=Math.max(y1-y0,6)*1.3;
+  if(w/h<4/3)w=h*4/3;else h=w*3/4;
+  r.vb=[(x0+x1)/2-w/2,(y0+y1)/2-h/2,w,h];r.k=w/MAP.W;
+}
+function pathPos(r,mi){const f=Math.max(0,mi/r.pathStep),i=Math.min(r.pts.length-1,Math.floor(f)),j=Math.min(r.pts.length-1,i+1),t=f-Math.floor(f),p=r.pts[i],q=r.pts[j];return{x:p[0]+(q[0]-p[0])*t,y:p[1]+(q[1]-p[1])*t,i}}
+function pathPts(r,mi){const P=pathPos(r,mi);return r.pts.slice(0,P.i+1).map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).concat(P.x.toFixed(1)+','+P.y.toFixed(1)).join(' ')}
+function renderRouteList(){
+  const box=$('routeList');box.textContent='';
+  if(!SC.ready){box.textContent='Loading scenic routes…';return}
+  if(!SC.routes.length){box.textContent="Couldn't load the scenic routes. Check your connection and reload the page.";return}
+  SC.routes.forEach(r=>{const c=document.createElement('div');c.className='rcard';
+    const h=document.createElement('h3');h.textContent=r.name;
+    const p=document.createElement('p');p.textContent=r.summary;
+    const f=document.createElement('div');f.className='facts';f.textContent=comma(r.D)+' mi · photos on '+Math.round(r.coverage)+'% of the road · '+r.marks.length+' landmarks';
+    const b=document.createElement('button');b.className='btn primary';b.type='button';b.textContent='Ride this route';b.addEventListener('click',()=>startScenic(r.id));
+    c.append(h,p,f,b);box.append(c)});
+}
+function startScenic(id){
+  S.journey={route:id,start:S.totalMi,started:dayKey()};plan.open=false;$('confirmBox').hidden=true;dirty=true;
+  renderPlanner();saveAll();
+}
+
+/* ---------- street photos (Mapillary) ---------- */
+// Image URLs expire, so they're fetched at play time and cached briefly. Two stacked <img> layers crossfade.
+const MLY_KEY='desk-ride-mly';
+const PH={route:null,want:null,shown:null,layer:0,idx:-1,err:'',errAt:0,cache:new Map(),pre:new Map()};
+function mlyToken(){try{return (localStorage.getItem(MLY_KEY)||'').trim()}catch(e){return ''}}
+function photoInfo(id){
+  const c=PH.cache.get(id);if(c&&Date.now()-c.t<20*60000)return c.p;
+  const tok=mlyToken();if(!tok)return Promise.reject(new Error('notoken'));
+  const p=fetch('https://graph.mapillary.com/'+id+'?fields=thumb_1024_url,creator&access_token='+encodeURIComponent(tok)).then(async res=>{
+    if(res.status===401||res.status===403)throw new Error('auth');if(!res.ok)throw new Error('http');
+    const j=await res.json();if(!j.thumb_1024_url)throw new Error('nourl');return{url:j.thumb_1024_url,by:(j.creator&&j.creator.username)||''}});
+  p.catch(()=>PH.cache.delete(id));
+  PH.cache.set(id,{p,t:Date.now()});if(PH.cache.size>60)PH.cache.delete(PH.cache.keys().next().value);
+  return p;
+}
+function loadImg(img,url){return new Promise((ok,bad)=>{img.onload=()=>ok();img.onerror=()=>bad(new Error('img'));img.src=url})}
+const PH_MSG={notoken:'Add your Mapillary access token in Settings to see street photos along the route.',auth:"Mapillary didn't accept the access token. Check it in Settings."};
+async function showFrame(id,mi){
+  PH.want=id;
+  try{
+    const info=await photoInfo(id);if(PH.want!==id)return;
+    const img=$('ph'+(1-PH.layer));await loadImg(img,info.url);if(PH.want!==id)return;
+    img.alt='Street photo near mile '+fmt1(mi);
+    $('ph'+PH.layer).classList.remove('on');img.classList.add('on');PH.layer=1-PH.layer;PH.shown=id;PH.err='';$('phMsg').textContent='';
+    const a=$('phAttr');a.textContent=(info.by?'Photo: '+info.by+' · ':'')+'© Mapillary';a.href='https://www.mapillary.com/app/?pKey='+id+'&focus=photo';
+  }catch(e){
+    if(PH.want!==id)return;PH.err=e.message;PH.errAt=Date.now();
+    if(e.message==='img')PH.cache.delete(id);   // the URL probably expired; fetch a fresh one on retry
+    if(PH_MSG[e.message])$('phMsg').textContent=PH_MSG[e.message];
+    else if(!PH.shown)$('phMsg').textContent="Couldn't load the street photo. Trying again shortly…";
+  }
+}
+function preload(r,idx){
+  const seen=new Set([r.hold[idx]]);let n=0;
+  for(let i=idx+1;i<r.frames.length&&n<5;i++){const id=r.frames[i];if(!id||seen.has(id))continue;seen.add(id);n++;
+    if(PH.pre.has(id))continue;
+    photoInfo(id).then(info=>{const im=new Image();im.src=info.url;PH.pre.set(id,im);if(PH.pre.size>15)PH.pre.delete(PH.pre.keys().next().value)}).catch(()=>{})}
+}
+function updatePhoto(r,prog){
+  if(PH.route!==r.id){PH.route=r.id;PH.want=PH.shown=null;PH.idx=-1;$('ph0').classList.remove('on');$('ph1').classList.remove('on');$('phAttr').textContent=''}
+  if(!mlyToken()){PH.want=null;$('phMsg').textContent=PH_MSG.notoken;return}
+  if(PH.err&&Date.now()-PH.errAt>15000)PH.want=null;   // retry after an error
+  const idx=Math.max(0,Math.min(r.frames.length-1,Math.floor(prog/r.stepMi))),id=r.hold[idx];
+  if(!id){$('phMsg').textContent='No street photos on this route yet.';return}
+  if(id!==PH.want)showFrame(id,prog);
+  if(idx!==PH.idx){PH.idx=idx;preload(r,idx)}
+  $('phMile').textContent='Mile '+fmt1(prog)+' of '+fmt1(r.D)+(r.frames[idx]?'':' · no new photo here');
 }
 
 /* ---------- map ---------- */
 const NS='http://www.w3.org/2000/svg';
+let mapK=1;   // map units per full-size unit; below 1 when zoomed in on a scenic route
+function setZoom(r){
+  const svg=$('map');svg.classList.toggle('zoomed',!!r);mapK=r?r.k:1;
+  svg.setAttribute('viewBox',r?r.vb.map(v=>v.toFixed(1)).join(' '):'0 0 '+MAP.W+' '+MAP.H);
+  meDot.setAttribute('r',9*mapK);meLbl.style.fontSize=(12*mapK)+'px';meLbl.style.strokeWidth=(4*mapK)+'px';
+}
+function mapLabel(x,y,text,parent){const t=el('text',{x:x+12*mapK,y:y+4*mapK,class:'wpl','text-anchor':'start'},parent);t.textContent=text;if(mapK!==1){t.style.fontSize=(11*mapK)+'px';t.style.strokeWidth=(3*mapK)+'px'}return t}
 function el(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e}
 let gRoute,gTowns,gPick,othersG,meDot,meLbl;
-const plan={a:null,b:null,step:0,open:false};
+const plan={a:null,b:null,step:0,open:false,kind:'cities'};
 function buildMap(){
   const svg=$('map');svg.setAttribute('viewBox','0 0 '+MAP.W+' '+MAP.H);
   const g=el('g',{},svg);for(const k in MAP.states)el('path',{d:MAP.states[k],class:'st'},g);
@@ -420,13 +568,16 @@ function onMapClick(ev){
   renderPlanner();
 }
 function renderPlanner(){
-  $('planner').hidden=!plan.open;
+  const scen=plan.open&&plan.kind==='scenic';
+  $('planKind').hidden=!plan.open;$('kCities').setAttribute('aria-pressed',!scen);$('kScenic').setAttribute('aria-pressed',scen);
+  $('planner').hidden=!plan.open||scen;$('routeList').hidden=!scen;$('mapgrid').hidden=scen;if(scen)renderRouteList();
   $('lFrom').classList.toggle('active',plan.open&&plan.step===0);$('lTo').classList.toggle('active',plan.open&&plan.step===1);
   $('btnGo').disabled=!(plan.a&&plan.b&&plan.a!==plan.b);
   $('hint').textContent=!plan.a?'Click a city on the map for your start, then click your destination.':!plan.b?'Now click your destination.':
     plan.a.n+' to '+plan.b.n+' is about '+comma(routeMiles(plan.a,plan.b))+' miles. Click the map to change '+(plan.step===0?'the start':'the destination')+'.';
   renderTrip();
 }
+function setSignKeys(a,b,c){$('nearK').textContent=a;$('nextK').textContent=b;$('destK').textContent=c}
 function setSigns(near,nearNote,next,nextMi,dest,destMi){$('nearTxt').textContent=near;$('nearNote').textContent=nearNote;$('nextTxt').textContent=next;$('nextMi').textContent=nextMi;$('destTxt').textContent=dest;$('destMi').textContent=destMi}
 function drawTowns(T,prog){
   T.forEach(t=>el('circle',{cx:t.x,cy:t.y,r:4,class:'wp'+(prog!==null&&t.mi<=prog?' done':'')},gTowns));
@@ -438,8 +589,11 @@ function drawTowns(T,prog){
 function renderTrip(){
   if(!gRoute)return;
   gRoute.textContent='';gTowns.textContent='';gPick.textContent='';
-  const J=jInfo(),st=S.settings;
-  $('btnNew').hidden=plan.open||!J;
+  const J=jInfo(),st=S.settings,zr=!plan.open&&J&&J.scenic?J.r:null;
+  if((mapK!==1)!==!!zr||(zr&&mapK!==zr.k))setZoom(zr);
+  $('scene').hidden=!zr;$('mapgrid').classList.toggle('scenic',!!zr);$('lmH').hidden=$('lmList').hidden=!zr;
+  if(!zr)setSignKeys('You are near','Next stop','Destination');
+  $('btnNew').hidden=plan.open||!S.journey;
   if(plan.open){
     meDot.style.display='none';meLbl.textContent='';$('arrived').hidden=true;
     const a=plan.a,b=plan.b;
@@ -453,6 +607,7 @@ function renderTrip(){
     renderOthers();return;
   }
   if(!J){renderOthers();return}
+  if(J.scenic){renderScenic(J);renderOthers();return}
   const {a,b,D,prog,arrived}=J,T=towns(a,b),p=posOn(a,b,prog);
   el('polyline',{points:linePts(a,b),class:'rt'},gRoute);
   if(prog>0)el('polyline',{points:linePts(a,b,prog/D),class:'rd'},gRoute);
@@ -469,8 +624,44 @@ function renderTrip(){
   $('btnNew').textContent=arrived?'Plan next journey':'New journey';
   renderOthers();
 }
+let lmKey='';
+function renderScenic(J){
+  const {r,D,prog,arrived}=J,st=S.settings,k=mapK,eps=0.001;
+  el('polyline',{points:r.fullPts,class:'rt'},gRoute);
+  if(prog>0)el('polyline',{points:pathPts(r,prog),class:'rd'},gRoute);
+  const next=r.marks.find(m=>m.mi>prog+eps)||null,passed=r.marks.filter(m=>m.mi<=prog+eps),last=passed[passed.length-1]||null;
+  r.marks.forEach(m=>{const q=pathPos(r,m.mi);el('circle',{cx:q.x,cy:q.y,r:4*k,class:'wp'+(m.mi<=prog+eps?' done':'')},gTowns)});
+  [r.marks[0],next,r.marks[r.marks.length-1]].forEach((m,i,arr)=>{if(!m||arr.indexOf(m)!==i)return;const q=pathPos(r,m.mi);mapLabel(q.x,q.y,m.name,gTowns)});
+  const p=pathPos(r,prog);
+  meDot.style.display='';meDot.setAttribute('cx',p.x);meDot.setAttribute('cy',p.y);
+  meLbl.setAttribute('x',p.x);meLbl.setAttribute('y',p.y-15*k);meLbl.textContent=famRows.length>1?'You':'';
+  // highway-style signs
+  setSignKeys('Just passed','Coming up','Finish');
+  setSigns(last?last.name:r.a.n,!last||last.mi<eps?'Starting point':'Mile '+fmt1(last.mi),
+    next?next.name:'Finish line',next?fmt1(next.mi-prog)+' mi':'Arrived',
+    r.b.n.split(',')[0],arrived?'You made it':fmt1(D-prog)+' mi to go');
+  $('jTitle').textContent=r.name+' · '+comma(D)+' mi';
+  $('mmLeft').textContent='Mile '+fmt1(prog);$('mmPct').textContent=(prog/D*100).toFixed(1)+'% of the way';$('mmTot').textContent=comma(D)+' mi';
+  $('tripBar').style.width=(prog/D*100)+'%';
+  $('eta').textContent=arrived?'Pick another route to keep going.':'At '+st.target+' RPM, an hour a day gets you to the finish in about '+etaTxt(D-prog)+'.';
+  $('arrived').hidden=!arrived;if(arrived)$('arrived').textContent='You finished '+r.name+'! That\'s '+comma(D)+' miles.';
+  $('btnNew').textContent=arrived?'Pick next route':'New journey';
+  // the sign over the photo: show the next landmark from a mile out, then "now passing" for a short stretch
+  const ps=$('phSign');
+  if(next&&next.mi-prog<=1){ps.hidden=false;$('phSignK').textContent='Coming up';$('phSignT').textContent=next.name;$('phSignD').textContent=fmt1(Math.max(0,next.mi-prog))+' mi'}
+  else if(last&&last.mi>eps&&prog-last.mi<0.3){ps.hidden=false;$('phSignK').textContent='Now passing';$('phSignT').textContent=last.name;$('phSignD').textContent=last.note||''}
+  else ps.hidden=true;
+  // landmark list, rebuilt only when what's passed changes
+  const key=r.id+'|'+passed.length;
+  if(key!==lmKey){lmKey=key;const ul=$('lmList');ul.textContent='';
+    r.marks.forEach(m=>{const li=document.createElement('li'),x=document.createElement('span'),y=document.createElement('span');
+      li.className=m.mi<=prog+eps?'passed':m===next?'next':'';
+      x.textContent=m.name;if(m.note){const s=document.createElement('small');s.textContent=m.note;x.append(s)}
+      y.textContent='mi '+fmt1(m.mi);li.append(x,y);ul.append(li)})}
+  updatePhoto(r,prog);
+}
 function etaTxt(mi){const perHour=S.settings.target*S.settings.ft*60/5280,days=mi/perHour;return days>60?Math.round(days/30.4)+' months':days>=1.5?Math.ceil(days)+' days':Math.max(1,Math.round(days*60))+' minutes of pedaling'}
-function openPlanner(){const J=jInfo();plan.open=true;plan.a=J?(J.arrived?J.b:J.a):plan.a;plan.b=null;plan.step=plan.a?1:0;
+function openPlanner(){const J=jInfo();plan.open=true;if(J&&J.scenic)plan.kind='scenic';plan.a=J&&!J.scenic?(J.arrived?J.b:J.a):plan.a;plan.b=null;plan.step=plan.a?1:0;
   $('pFrom').value=plan.a?plan.a.n:'';$('pTo').value='';$('confirmBox').hidden=true;renderPlanner()}
 function startJourney(){
   if(!plan.a||!plan.b||plan.a===plan.b)return;
@@ -479,7 +670,7 @@ function startJourney(){
 }
 function renderDone(){const L=S.done||[],ul=$('jDone');ul.textContent='';$('jDoneH').hidden=!L.length;
   L.forEach(d=>{const li=document.createElement('li'),x=document.createElement('span'),y=document.createElement('span');
-    x.textContent=d.a.split(',')[0]+' → '+d.b.split(',')[0];y.textContent=comma(d.mi)+' mi · '+String(d.ended||'').slice(5).replace('-','/');li.append(x,y);ul.append(li)})}
+    x.textContent=d.b?d.a.split(',')[0]+' → '+d.b.split(',')[0]:d.a+' (scenic)';y.textContent=comma(d.mi)+' mi · '+String(d.ended||'').slice(5).replace('-','/');li.append(x,y);ul.append(li)})}
 
 /* ---------- chart ---------- */
 function renderChart(){
@@ -502,7 +693,7 @@ function renderChart(){
 /* ---------- family (shared db) ---------- */
 function myRiderDoc(){
   const J=jInfo();
-  return {nick:S.settings.nick.trim(),totalMi:Math.round(S.totalMi*10)/10,weekMi:Math.round(weekMi()*10)/10,weekKey:dayKey(weekStart()),todayMi:Math.round(today().mi*10)/10,dayKey:dayKey(),jA:J?J.a.n:'',jB:J?J.b.n:'',jProg:J?Math.round(J.prog*10)/10:0,updatedAt:Date.now()};
+  return {nick:S.settings.nick.trim(),totalMi:Math.round(S.totalMi*10)/10,weekMi:Math.round(weekMi()*10)/10,weekKey:dayKey(weekStart()),todayMi:Math.round(today().mi*10)/10,dayKey:dayKey(),jA:J?J.a.n:'',jB:J?J.b.n:'',jRoute:J&&J.scenic?J.r.id:'',jProg:J?Math.round(J.prog*10)/10:0,updatedAt:Date.now()};
 }
 let riderUnsub=null,lastRiderJson='';
 async function pushRider(){
@@ -545,11 +736,13 @@ let famRows=[];
 function renderOthers(){
   if(!othersG)return;othersG.textContent='';
   if(S.settings.mode!=='together')return;
-  famRows.filter(r=>!r.isMe).forEach(r=>{const a=cityOf(r.jA),b=cityOf(r.jB);if(!a||!b)return;
-    const D=routeMiles(a,b),pr=Math.min(D,r.jProg||0),p=posOn(a,b,pr);
-    const ln=el('polyline',{points:linePts(a,b),class:'orl'},othersG);ln.style.stroke=r.color;
-    const c=el('circle',{cx:p.x,cy:p.y,r:8,class:'oth'},othersG);c.style.fill=r.color;
-    const t=el('text',{x:p.x,y:p.y+24,class:'ridl','text-anchor':'middle'},othersG);t.style.fill=r.color;t.textContent=r.name+' → '+b.n.split(',')[0]});
+  const k=mapK;
+  famRows.filter(r=>!r.isMe).forEach(r=>{const R=r.jRoute?SC.byId.get(r.jRoute):null,a=R?R.a:cityOf(r.jA),b=R?R.b:cityOf(r.jB);if(!a||!b)return;
+    const D=R?R.D:routeMiles(a,b),pr=Math.min(D,r.jProg||0),p=R?pathPos(R,pr):posOn(a,b,pr);
+    const ln=el('polyline',{points:R?R.fullPts:linePts(a,b),class:'orl'},othersG);ln.style.stroke=r.color;
+    const c=el('circle',{cx:p.x,cy:p.y,r:8*k,class:'oth'},othersG);c.style.fill=r.color;
+    const t=el('text',{x:p.x,y:p.y+24*k,class:'ridl','text-anchor':'middle'},othersG);t.style.fill=r.color;t.textContent=r.name+' → '+(R?R.name:b.n.split(',')[0]);
+    if(k!==1){t.style.fontSize=(12*k)+'px';t.style.strokeWidth=(4*k)+'px'}});
 }
 
 /* ---------- persistence ---------- */
@@ -599,7 +792,7 @@ $('modeTog').addEventListener('click',()=>setMode('together'));
 $('btnSwap').addEventListener('click',()=>{[plan.a,plan.b]=[plan.b,plan.a];$('pFrom').value=plan.a?plan.a.n:'';$('pTo').value=plan.b?plan.b.n:'';renderPlanner()});
 $('btnGo').addEventListener('click',startJourney);
 $('btnNew').addEventListener('click',()=>{const J=jInfo();
-  if(J&&!J.arrived){$('confirmTxt').textContent='You\'re '+comma(J.prog)+' of '+comma(J.D)+' miles into '+J.a.n.split(',')[0]+' to '+J.b.n.split(',')[0]+'. A new journey ends this one; your miles stay in the logbook.';$('confirmBox').hidden=false}
+  if(J&&!J.arrived){$('confirmTxt').textContent='You\'re '+comma(J.prog)+' of '+comma(J.D)+' miles into '+J.label+'. A new journey ends this one; your miles stay in the logbook.';$('confirmBox').hidden=false}
   else openPlanner()});
 $('cfYes').addEventListener('click',openPlanner);
 $('cfNo').addEventListener('click',()=>{$('confirmBox').hidden=true});
@@ -608,9 +801,14 @@ $('cfNo').addEventListener('click',()=>{$('confirmBox').hidden=true});
   $(id).addEventListener('focus',()=>{plan.step=i;renderPlanner()})});
 function openPlannerDefault(){plan.open=true;if(!plan.a){plan.a=byName.get('san francisco, ca');plan.b=byName.get('new york, ny');$('pFrom').value=plan.a.n;$('pTo').value=plan.b.n;plan.step=0}}
 
+$('kCities').addEventListener('click',()=>{plan.kind='cities';renderPlanner()});
+$('kScenic').addEventListener('click',()=>{plan.kind='scenic';renderPlanner()});
+$('sMly').addEventListener('change',()=>{try{localStorage.setItem(MLY_KEY,$('sMly').value.trim())}catch(e){}
+  PH.cache.clear();PH.want=null;PH.err='';$('phMsg').textContent='';renderTrip()});
+
 $('tSlow').addEventListener('click',()=>play('slow'));$('tStop').addEventListener('click',()=>play('stop'));
 
-loadLocal();buildMap();applySettingsToForm();renderAll();
+loadLocal();buildMap();applySettingsToForm();$('sMly').value=mlyToken();renderAll();
 setInterval(tick,1000);
-initCloud();
+initCloud();loadScenic();
 </script>
