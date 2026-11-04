@@ -261,7 +261,7 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
       <div class="form">
         <label for="sTarget">Target cadence (RPM)<span>Alert when you drop below this.</span><input type="number" id="sTarget" min="10" max="120" step="1"></label>
         <label for="sGrace">Grace period (seconds)<span>How long you can be slow before it chimes.</span><input type="number" id="sGrace" min="3" max="120" step="1"></label>
-        <label for="sFt">Distance per pedal turn (feet)<span>Sets your virtual gear. 20 ft is a medium road-bike gear.</span><input type="number" id="sFt" min="5" max="40" step="0.5"></label>
+        <label for="sFt">Distance per pedal turn (feet)<span>Sets your virtual gear. 15 ft is a realistic easy ride: about 12 mph at 70 RPM.</span><input type="number" id="sFt" min="5" max="40" step="0.5"></label>
         <label for="sAway">Auto-pause after stopped (minutes)<span>Stops nagging when you've stepped away.</span><input type="number" id="sAway" min="1" max="60" step="1"></label>
         <label for="sSound">Alert sound<select id="sSound"><option value="chime">Chime</option><option value="beep">Beep</option><option value="block">Woodblock</option></select></label>
         <label for="sVol">Volume<input type="range" id="sVol" min="0" max="1" step="0.05"></label>
@@ -280,7 +280,7 @@ const fmt1 = n => n.toFixed(1), fmt2 = n => n.toFixed(2);
 const comma = n => Math.round(n).toLocaleString('en-US');
 
 /* ---------- state ---------- */
-const DEFAULTS = {target:50, grace:10, ft:20, away:5, sound:'chime', vol:0.6, nick:'', mode:'separate'};
+const DEFAULTS = {target:50, grace:10, ft:15, away:5, sound:'chime', vol:0.6, nick:'', mode:'separate'};
 let S = {settings:{...DEFAULTS}, totalMi:0, days:{}, journey:null, done:[]};   // persisted
 const live = {rpm:0, revs:null, lastEvt:null, lastRevAt:0, sesMi:0, sesSec:0, belowSince:null, stoppedSince:null, lastAlert:0, pedaledOnce:false, paused:false, sim:false, simRpm:0, simAcc:0};
 let dirty = false, db = null, uid = null, userCap = null, riders = [];
