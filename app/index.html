@@ -191,6 +191,8 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
   body.riding.bigmap #mapgrid>div:first-child{grid-area:photo}
   body.riding.bigmap .lmap{height:calc(100vh - 330px)!important;min-height:320px}
   body.riding.bigmap .phsign{display:none}
+  body.riding.bigmap .photo{cursor:pointer}
+  body.riding:not(.bigmap) .lmap{cursor:pointer}
   body.riding #lmList{grid-area:lm;max-height:none;display:block;columns:300px 3;column-gap:28px}
   body.riding #lmList li{break-inside:avoid;margin-bottom:4px}
 }
@@ -709,13 +711,12 @@ function renderStreetMap(r,prog,eps){
       const d=L.DomUtil.create('div','leaflet-bar');
       LM.bF=L.DomUtil.create('button','mapbtn',d);LM.bF.type='button';LM.bF.textContent='Follow me';LM.bF.title='Keep the map centered on you as you ride';
       LM.bW=L.DomUtil.create('button','mapbtn',d);LM.bW.type='button';LM.bW.textContent='Whole route';LM.bW.title='Zoom out to the whole route';
-      LM.bB=L.DomUtil.create('button','mapbtn',d);LM.bB.type='button';LM.bB.title='Swap the map and the street photo';
-      LM.bB.onclick=()=>{LM.big=!LM.big;setBig();saveView()};
       L.DomEvent.disableClickPropagation(d);
       LM.bF.onclick=()=>setFollow(true,true);LM.bW.onclick=()=>{setFollow(false);fitRoute()};
       return d}});
     new Btns().addTo(LM.map);
     LM.map.on('dragstart',()=>setFollow(false));
+    LM.map.on('click',()=>{if(!LM.big)swapViews(true)});   // clicking the small map makes it the big view
     LM.map.on('zoomend',saveView);
     if(window.ResizeObserver)new ResizeObserver(()=>LM.map.invalidateSize()).observe($('lmap'));
   }
@@ -750,7 +751,8 @@ function setFollow(on,jump){
   if(on&&jump){const J=jInfo();if(J&&J.scenic)LM.map.setView(llAt(J.r,J.prog),Math.max(LM.map.getZoom(),14))}
   saveView()}
 function saveView(){if(!LM.map||!LM.rid)return;try{localStorage.setItem(LM_KEY,JSON.stringify({rid:LM.rid,follow:LM.follow,z:LM.map.getZoom(),big:!!LM.big}))}catch(e){}}
-function setBig(){document.body.classList.toggle('bigmap',!!LM.big);if(LM.bB)LM.bB.textContent=LM.big?'Bigger photo':'Bigger map';if(LM.map)setTimeout(()=>{LM.map.invalidateSize();if(LM.follow){const J=jInfo();if(J&&J.scenic)LM.map.setView(llAt(J.r,J.prog),LM.map.getZoom(),{animate:false})}},50)}
+function swapViews(big){if(!document.body.classList.contains('riding')||innerWidth<=860)return;LM.big=big;setBig();saveView()}
+function setBig(){document.body.classList.toggle('bigmap',!!LM.big);$('scene').title=LM.big?'Click to make the photo big':'';$('lmap').title=LM.big?'':'Click to make the map big';if(LM.map)setTimeout(()=>{LM.map.invalidateSize();if(LM.follow){const J=jInfo();if(J&&J.scenic)LM.map.setView(llAt(J.r,J.prog),LM.map.getZoom(),{animate:false})}},50)}
 function loadView(){try{return JSON.parse(localStorage.getItem(LM_KEY)||'null')}catch(e){return null}}
 let lmKey='';
 function renderScenic(J){
@@ -935,6 +937,7 @@ $('kScenic').addEventListener('click',()=>{plan.kind='scenic';renderPlanner()});
 $('sMly').addEventListener('change',()=>{try{localStorage.setItem(MLY_KEY,$('sMly').value.trim())}catch(e){}
   PH.cache.clear();PH.want=null;PH.err='';$('phMsg').textContent='';renderTrip()});
 
+$('scene').addEventListener('click',e=>{if(LM.big&&!e.target.closest('a'))swapViews(false)});   // clicking the small photo makes it the big view
 $('tSlow').addEventListener('click',()=>play('slow'));$('tStop').addEventListener('click',()=>play('stop'));
 
 loadLocal();buildMap();applySettingsToForm();$('sMly').value=mlyToken();renderAll();
