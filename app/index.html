@@ -140,6 +140,12 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
 .attr{right:8px;text-decoration:none}
 .attr:hover{text-decoration:underline}
 .attr:empty,.phmile:empty{display:none}
+.yt,.ytshield{position:absolute;inset:0}
+.yt iframe{width:100%;height:100%;border:0;display:block}
+.yt{background:#0b0f0d}
+.vtoggle{position:absolute;top:12px;left:12px;display:inline-flex;border-radius:6px;overflow:hidden;background:rgba(0,0,0,.55)}
+.vtoggle button{border:0;background:transparent;color:#fff;font:inherit;font-size:12px;font-weight:800;padding:5px 10px;cursor:pointer}
+.vtoggle button[aria-pressed="true"]{background:var(--sign)}
 .mapgrid.scenic{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .mapgrid.scenic #map{max-height:340px}
 .zoomed .st,.zoomed .rt,.zoomed .rd,.zoomed .orl,.zoomed .wp,.zoomed .me,.zoomed .oth{vector-effect:non-scaling-stroke}
@@ -190,7 +196,7 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
   body.riding.bigmap #scene{grid-area:map}
   body.riding.bigmap #mapgrid>div:first-child{grid-area:photo}
   body.riding.bigmap .lmap{height:calc(100vh - 330px)!important;min-height:320px}
-  body.riding.bigmap .phsign{display:none}
+  body.riding.bigmap .phsign,body.riding.bigmap .vtoggle{display:none}
   body.riding.bigmap .photo{cursor:pointer}
   body.riding:not(.bigmap) .lmap{cursor:pointer}
   body.riding #lmList{grid-area:lm;max-height:none;display:block;columns:300px 3;column-gap:28px}
@@ -250,7 +256,9 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
     <div class="scene" id="scene" hidden>
       <div class="photo">
         <img id="ph0" alt=""><img id="ph1" alt="">
+        <div class="yt" id="ytBox" hidden><div id="ytPlayer"></div></div><div class="ytshield" id="ytShield" hidden></div>
         <div class="phmsg" id="phMsg"></div>
+        <div class="vtoggle" id="vToggle" role="group" aria-label="Street view" hidden><button type="button" data-v="video">Video</button><button type="button" data-v="photos">Photos</button></div>
         <div class="hwsign phsign" id="phSign" hidden><div class="k" id="phSignK"></div><div class="t" id="phSignT"></div><div class="d" id="phSignD"></div></div>
         <span class="phmile" id="phMile"></span>
         <a class="attr" id="phAttr" target="_blank" rel="noopener"></a>
@@ -605,6 +613,66 @@ function updatePhoto(r,prog){
   if(idx!==PH.idx){PH.idx=idx;preload(r,idx)}
 }
 
+/* ---------- driving video (YouTube): pedaling plays it, your speed sets the playback speed ---------- */
+// route.video.sync is a list of [route mile, video second] pairs; between them the video is assumed to move at a steady speed.
+const VID_KEY='desk-ride-view',YV={api:null,player:null,ready:false,state:-1,rate:1,rates:null,vid:null,err:null,lastSeek:0,on:false};
+function viewPref(){try{return localStorage.getItem(VID_KEY)||'video'}catch(e){return 'video'}}
+function vidSpan(r){const s=r.video&&r.video.sync;return s&&s.length>1?[s[0][0],s[s.length-1][0]]:null}
+function vidSeg(r,mi){const s=r.video.sync;let i=1;while(i<s.length-1&&mi>s[i][0])i++;return[s[i-1],s[i]]}
+function vidTime(r,mi){const[a,b]=vidSeg(r,mi);return a[1]+(b[1]-a[1])*(mi-a[0])/(b[0]-a[0])}
+function vidSecPerMi(r,mi){const[a,b]=vidSeg(r,mi);return(b[1]-a[1])/(b[0]-a[0])}
+function useVideo(r,prog){const sp=vidSpan(r);return!!(sp&&viewPref()==='video'&&!YV.err&&prog>=sp[0]&&prog<sp[1])}
+function loadYT(){
+  if(!YV.api)YV.api=new Promise(res=>{if(window.YT&&YT.Player)return res(YT);
+    const prev=window.onYouTubeIframeAPIReady;window.onYouTubeIframeAPIReady=()=>{if(prev)prev();res(window.YT)};
+    const t=document.createElement('script');t.src='https://www.youtube.com/iframe_api';t.onerror=()=>res(null);document.head.append(t);
+    setTimeout(()=>res(window.YT&&YT.Player?YT:null),15000)});
+  return YV.api}
+function showVideo(on){
+  if(YV.on===on)return;YV.on=on;
+  $('ytBox').hidden=$('ytShield').hidden=!on;
+  if(on){$('phMsg').textContent=''}
+  else{if(YV.player&&YV.ready&&YV.state===1)YV.player.pauseVideo();PH.want=null;$('phAttr').textContent=''}   // PH.want=null makes the photo reload
+}
+function vidAttr(r,T){const a=$('phAttr');a.textContent='Video: '+r.video.channel+' · YouTube';a.href='https://www.youtube.com/watch?v='+r.video.youtube+'&t='+Math.floor(T)+'s'}
+function updateVideo(r,prog){
+  showVideo(true);
+  const T=vidTime(r,prog);vidAttr(r,T);
+  $('phMile').textContent='Mile '+fmt1(prog)+' of '+fmt1(r.D);
+  if(!YV.player){
+    if(!YV.loading){YV.loading=true;$('phMsg').textContent='Loading the video…';
+      loadYT().then(Y=>{if(!Y){YV.err='load';renderTrip();return}
+        YV.vid=r.video.youtube;
+        YV.player=new Y.Player('ytPlayer',{videoId:YV.vid,playerVars:{controls:0,disablekb:1,fs:0,rel:0,playsinline:1,iv_load_policy:3,mute:1,start:Math.floor(T)},
+          events:{onReady:()=>{YV.ready=true;YV.player.mute();YV.rates=YV.player.getAvailablePlaybackRates()||null;$('phMsg').textContent=''},
+            onStateChange:e=>{YV.state=e.data},
+            onPlaybackRateChange:e=>{YV.rate=e.data},
+            onError:e=>{YV.err='yt'+e.data;showVideo(false);renderTrip()}}})})}
+    return}
+  if(!YV.ready)return;
+  const P=YV.player,now=Date.now();
+  if(YV.vid!==r.video.youtube){YV.vid=r.video.youtube;P.cueVideoById({videoId:YV.vid,startSeconds:T});YV.lastSeek=now;return}
+  const c=P.getCurrentTime()||0,err=c-T,moving=live.rpm>0.5;   // err > 0: the video is ahead of you
+  if(!moving){
+    if(YV.state===1||YV.state===3)P.pauseVideo();
+    if(Math.abs(err)>4&&now-YV.lastSeek>3000){P.seekTo(T,true);P.pauseVideo();YV.lastSeek=now}
+    if(YV.state!==1&&$('phMsg').textContent==='')$('phMile').textContent+=' · start pedaling to roll';
+    return}
+  if(Math.abs(err)>15&&now-YV.lastSeek>4000){P.seekTo(T,true);YV.lastSeek=now;return}
+  if(err>1.5){if(YV.state===1)P.pauseVideo();return}   // you're slower than the slowest playback speed: wait for you to catch up
+  const mph=live.rpm*S.settings.ft*60/5280,need=mph/3600*vidSecPerMi(r,prog),want=need*(1-0.15*err);
+  const rates=(YV.rates&&YV.rates.length?YV.rates:[0.25,0.5,0.75,1,1.25,1.5,1.75,2]).filter(x=>x<=2);
+  let best=rates[0];for(const x of rates)if(Math.abs(x-want)<Math.abs(best-want))best=x;
+  if(best!==YV.rate){P.setPlaybackRate(best);YV.rate=best}
+  if(YV.state!==1&&YV.state!==3)P.playVideo();
+}
+function renderVToggle(r){
+  const has=!!vidSpan(r),v=viewPref();$('vToggle').hidden=!has;
+  if(has)$('vToggle').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===v));
+}
+function photoNote(r,prog){const sp=vidSpan(r);if(!sp||viewPref()!=='video'||YV.err)return;
+  if(prog<sp[0])$('phMile').textContent+=' · video starts at mile '+fmt1(sp[0]);else if(prog>=sp[1])$('phMile').textContent+=' · video ended, back to photos'}
+
 /* ---------- map ---------- */
 const NS='http://www.w3.org/2000/svg';
 let mapK=1;   // map units per full-size unit; below 1 when zoomed in on a scenic route
@@ -661,7 +729,7 @@ function renderTrip(){
   const J=jInfo(),st=S.settings,zr=!plan.open&&J&&J.scenic?J.r:null;
   if((mapK!==1)!==!!zr||(zr&&mapK!==zr.k))setZoom(zr);
   $('scene').hidden=!zr;$('mapgrid').classList.toggle('scenic',!!zr);$('lmH').hidden=$('lmList').hidden=!zr;
-  document.body.classList.toggle('riding',!!zr);if(!zr)document.body.classList.remove('bigmap');if(!zr&&!$('lmap').hidden)showStreetMap(false);
+  document.body.classList.toggle('riding',!!zr);if(!zr){document.body.classList.remove('bigmap');showVideo(false)}if(!zr&&!$('lmap').hidden)showStreetMap(false);
   if(!zr)setSignKeys('You are near','Next stop','Destination');
   $('btnNew').hidden=plan.open||!S.journey;
   if(plan.open){
@@ -789,7 +857,8 @@ function renderScenic(J){
       x.textContent=m.name;if(m.note){const s=document.createElement('small');s.textContent=m.note;x.append(s)}
       y.textContent='mi '+fmt1(m.mi);li.append(x,y);ul.append(li)})}
   renderStreetMap(r,prog,eps);
-  updatePhoto(r,prog);
+  renderVToggle(r);
+  if(useVideo(r,prog))updateVideo(r,prog);else{showVideo(false);updatePhoto(r,prog);photoNote(r,prog)}
 }
 function etaTxt(mi){const perHour=S.settings.target*S.settings.ft*60/5280,days=mi/perHour;return days>60?Math.round(days/30.4)+' months':days>=1.5?Math.ceil(days)+' days':Math.max(1,Math.round(days*60))+' minutes of pedaling'}
 function openPlanner(){const J=jInfo();plan.open=true;if(J&&J.scenic)plan.kind='scenic';plan.a=J&&!J.scenic?(J.arrived?J.b:J.a):plan.a;plan.b=null;plan.step=plan.a?1:0;
@@ -937,6 +1006,8 @@ $('kScenic').addEventListener('click',()=>{plan.kind='scenic';renderPlanner()});
 $('sMly').addEventListener('change',()=>{try{localStorage.setItem(MLY_KEY,$('sMly').value.trim())}catch(e){}
   PH.cache.clear();PH.want=null;PH.err='';$('phMsg').textContent='';renderTrip()});
 
+$('vToggle').addEventListener('click',e=>{e.stopPropagation();const b=e.target.closest('button');if(!b)return;
+  try{localStorage.setItem(VID_KEY,b.dataset.v)}catch(x){}renderTrip()});
 $('scene').addEventListener('click',e=>{if(LM.big&&!e.target.closest('a'))swapViews(false)});   // clicking the small photo makes it the big view
 $('tSlow').addEventListener('click',()=>play('slow'));$('tStop').addEventListener('click',()=>play('stop'));
 
