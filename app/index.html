@@ -365,7 +365,10 @@ function play(kind){const s=S.settings.sound;
 let btDev=null,attaching=false,btT0=0;
 function showMsg(t){$('msg').textContent=t;$('msg').hidden=!t}
 // step-by-step log so a failed connection can be diagnosed from what the rider sees
-function btLog(s){const t=btT0?((performance.now()-btT0)/1000).toFixed(1)+'s ':'';$('btLog').textContent+=t+s+'\n';$('btLogBox').hidden=false}
+function btLog(s){const t=btT0?((performance.now()-btT0)/1000).toFixed(1)+'s ':'',L=$('btLog');let x=L.textContent+t+s+'\n';
+  if(x.length>12000)x=x.slice(x.indexOf('\n',x.length-9000)+1);L.textContent=x;$('btLogBox').hidden=false}   // keep the log short during long reconnect loops
+// Windows can leave gatt.connect() hanging while the sensor sleeps, so give every step a time limit
+function withTimeout(p,ms,what){let t;return Promise.race([p,new Promise((_,bad)=>{t=setTimeout(()=>bad(new Error(what+' timed out')),ms)})]).finally(()=>clearTimeout(t))}
 async function connect(){
   audio();
   if(!navigator.bluetooth){showMsg("This browser can't reach Bluetooth sensors. Use Chrome or Edge on a computer with Bluetooth turned on.");return}
@@ -396,16 +399,18 @@ async function attachRetry(){
   }finally{attaching=false}
 }
 async function attach(){
-  const srv=await btDev.gatt.connect();btLog('  link up (connected='+btDev.gatt.connected+')');
-  const svc=await srv.getPrimaryService('cycling_speed_and_cadence');btLog('  found cadence service');
+  const srv=await withTimeout(btDev.gatt.connect(),12000,'Connecting');btLog('  link up (connected='+btDev.gatt.connected+')');
+  const svc=await withTimeout(srv.getPrimaryService('cycling_speed_and_cadence'),10000,'Finding the cadence service');btLog('  found cadence service');
   const ch=await svc.getCharacteristic('csc_measurement');btLog('  found measurement');
   ch.addEventListener('characteristicvaluechanged',ev=>onCsc(ev.target.value));
-  await ch.startNotifications();btLog('  notifications on');
+  await withTimeout(ch.startNotifications(),10000,'Turning on readings');btLog('  notifications on');
   live.revs=null;live.lastEvt=null;
   setConn(true,btDev.name||'Sensor connected');
   if(live.sim){$('simOn').checked=false;setSim(false)}
 }
-async function reconnect(){if(!btDev||btDev.gatt.connected||attaching)return;try{await attachRetry()}catch(e){setTimeout(reconnect,5000)}}
+// The sensor sleeps when the pedals stop; keep trying quietly so it reconnects by itself once you pedal again.
+async function reconnect(){if(!btDev||btDev.gatt.connected||attaching)return;setConn(false,'Reconnecting… pedal to wake the sensor');
+  try{await attachRetry()}catch(e){setConn(false,'Reconnecting… pedal to wake the sensor');setTimeout(reconnect,5000)}}
 function onCsc(dv){
   const flags=dv.getUint8(0);let i=1;
   if(!btDev.gotData){btDev.gotData=true;btLog('First reading from sensor: '+(flags&2?'cadence':'')+(flags&1?' speed':'')+' (flags '+flags+')')}
@@ -508,13 +513,15 @@ function linePts(a,b,f=1){const out=[],N=48;for(let i=0;i<=N;i++){const p=interp
 // S.journey = {a, b (city names) | route (scenic route id), start (lifetime miles when it began), started, ended?}; S.done = recent finished journeys
 function jInfo(){
   const j=S.journey;if(!j)return null;const raw=Math.max(0,S.totalMi-j.start);
-  if(j.route){const r=SC.byId.get(j.route);if(!r)return null;return{scenic:true,r,a:r.a,b:r.b,D:r.D,prog:Math.min(raw,r.D),arrived:raw>=r.D,label:r.name}}
+  if(j.route){const r=SC.byId.get(j.route);if(!r)return null;
+    const from=j.from||0,to=Math.min(j.to||r.D,r.D),v=j.to&&r.video?r.video:null,pos=from+raw;   // from/to: a ride over part of the route (the video stretch)
+    return{scenic:true,r,a:r.a,b:r.b,D:to,from,len:to-from,endName:v&&v.toName?v.toName:r.b.n.split(',')[0],prog:Math.min(pos,to),arrived:pos>=to,label:r.name+(v?' (video)':'')}}
   const a=cityOf(j.a),b=cityOf(j.b);if(!a||!b)return null;
   const D=routeMiles(a,b);return{a,b,D,prog:Math.min(raw,D),arrived:raw>=D,label:a.n.split(',')[0]+' to '+b.n.split(',')[0]};
 }
 function checkArrival(){
   const J=jInfo();if(!J||!J.arrived||S.journey.ended)return;
-  S.journey.ended=dayKey();S.done=[{a:J.scenic?J.r.name:J.a.n,b:J.scenic?'':J.b.n,mi:Math.round(J.D),started:S.journey.started,ended:S.journey.ended},...(S.done||[])].slice(0,20);
+  S.journey.ended=dayKey();S.done=[{a:J.scenic?J.label:J.a.n,b:J.scenic?'':J.b.n,mi:Math.round(J.scenic?J.len:J.D),started:S.journey.started,ended:S.journey.ended},...(S.done||[])].slice(0,20);
   dirty=true;play('slow');setTimeout(()=>play('slow'),450);renderDone();saveAll();
 }
 
@@ -556,11 +563,17 @@ function renderRouteList(){
     const h=document.createElement('h3');h.textContent=r.name;
     const p=document.createElement('p');p.textContent=r.summary;
     const f=document.createElement('div');f.className='facts';f.textContent=comma(r.D)+' mi · photos on '+Math.round(r.coverage)+'% of the road · '+r.marks.length+' landmarks';
-    const b=document.createElement('button');b.className='btn primary';b.type='button';b.textContent='Ride this route';b.addEventListener('click',()=>startScenic(r.id));
-    c.append(h,p,f,b);box.append(c)});
+    const sp=vidSpan(r),btns=document.createElement('div');btns.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:auto';
+    const mk=(txt,primary,fn)=>{const b=document.createElement('button');b.className='btn'+(primary?' primary':'');b.type='button';b.textContent=txt;b.addEventListener('click',fn);btns.append(b)};
+    c.append(h,p,f);
+    if(sp){const v=document.createElement('div');v.className='facts';v.textContent='Driving video: '+(r.video.fromName||'mile '+fmt1(sp[0]))+' to '+(r.video.toName||'mile '+fmt1(sp[1]))+', '+comma(sp[1]-sp[0])+' mi';c.append(v);
+      mk('Ride with video ('+comma(sp[1]-sp[0])+' mi)',true,()=>startScenic(r.id,sp));mk('Full route ('+comma(r.D)+' mi)',false,()=>startScenic(r.id))}
+    else mk('Ride this route',true,()=>startScenic(r.id));
+    c.append(btns);box.append(c)});
 }
-function startScenic(id){
-  S.journey={route:id,start:S.totalMi,started:dayKey()};plan.open=false;$('confirmBox').hidden=true;dirty=true;
+function startScenic(id,span){
+  S.journey={route:id,start:S.totalMi,started:dayKey()};
+  if(span){S.journey.from=span[0];S.journey.to=span[1];try{localStorage.setItem(VID_KEY,'video')}catch(e){}}plan.open=false;$('confirmBox').hidden=true;dirty=true;
   renderPlanner();saveAll();
 }
 
@@ -605,7 +618,7 @@ function preload(r,idx){
 function updatePhoto(r,prog){
   if(PH.route!==r.id){PH.route=r.id;PH.want=PH.shown=null;PH.idx=-1;$('ph0').classList.remove('on');$('ph1').classList.remove('on');$('phAttr').textContent=''}
   const idx=Math.max(0,Math.min(r.frames.length-1,Math.floor(prog/r.stepMi))),id=r.hold[idx];
-  $('phMile').textContent='Mile '+fmt1(prog)+' of '+fmt1(r.D)+(r.frames[idx]||!PH.shown?'':' · no new photo here');
+  $('phMile').textContent='Mile '+fmt1(prog)+' of '+fmt1(PH.end||r.D)+(r.frames[idx]||!PH.shown?'':' · no new photo here');
   if(!mlyToken()){PH.want=null;$('phMsg').textContent=PH_MSG.notoken;return}
   if(PH.err&&Date.now()-PH.errAt>15000)PH.want=null;   // retry after an error
   if(!id){$('phMsg').textContent='No street photos on this route yet.';return}
@@ -638,7 +651,7 @@ function vidAttr(r,T){const a=$('phAttr');a.textContent='Video: '+r.video.channe
 function updateVideo(r,prog){
   showVideo(true);
   const T=vidTime(r,prog);vidAttr(r,T);
-  $('phMile').textContent='Mile '+fmt1(prog)+' of '+fmt1(r.D);
+  $('phMile').textContent='Mile '+fmt1(prog)+' of '+fmt1(PH.end||r.D);
   if(!YV.player){
     if(!YV.loading){YV.loading=true;$('phMsg').textContent='Loading the video…';
       loadYT().then(Y=>{if(!Y){YV.err='load';renderTrip();return}
@@ -824,10 +837,10 @@ function setBig(){document.body.classList.toggle('bigmap',!!LM.big);$('scene').t
 function loadView(){try{return JSON.parse(localStorage.getItem(LM_KEY)||'null')}catch(e){return null}}
 let lmKey='';
 function renderScenic(J){
-  const {r,D,prog,arrived}=J,st=S.settings,k=mapK,eps=0.001;
+  const {r,D,prog,arrived,from,len,endName}=J,st=S.settings,k=mapK,eps=0.001,frac=Math.max(0,(prog-from)/len);PH.end=D;
   el('polyline',{points:r.fullPts,class:'rt'},gRoute);
   if(prog>0)el('polyline',{points:pathPts(r,prog),class:'rd'},gRoute);
-  const next=r.marks.find(m=>m.mi>prog+eps)||null,passed=r.marks.filter(m=>m.mi<=prog+eps),last=passed[passed.length-1]||null;
+  const next=r.marks.find(m=>m.mi>prog+eps&&m.mi<=D+eps)||null,passed=r.marks.filter(m=>m.mi<=prog+eps),last=passed[passed.length-1]||null;
   r.marks.forEach(m=>{const q=pathPos(r,m.mi);el('circle',{cx:q.x,cy:q.y,r:4*k,class:'wp'+(m.mi<=prog+eps?' done':'')},gTowns)});
   [r.marks[0],next,r.marks[r.marks.length-1]].forEach((m,i,arr)=>{if(!m||arr.indexOf(m)!==i)return;const q=pathPos(r,m.mi);mapLabel(q.x,q.y,m.name,gTowns)});
   const p=pathPos(r,prog);
@@ -837,12 +850,12 @@ function renderScenic(J){
   setSignKeys('Just passed','Coming up','Finish');
   setSigns(last?last.name:r.a.n,!last||last.mi<eps?'Starting point':'Mile '+fmt1(last.mi),
     next?next.name:'Finish line',next?fmt1(next.mi-prog)+' mi':'Arrived',
-    r.b.n.split(',')[0],arrived?'You made it':fmt1(D-prog)+' mi to go');
-  $('jTitle').textContent=r.name+' · '+comma(D)+' mi';
-  $('mmLeft').textContent='Mile '+fmt1(prog);$('mmPct').textContent=(prog/D*100).toFixed(1)+'% of the way';$('mmTot').textContent=comma(D)+' mi';
-  $('tripBar').style.width=(prog/D*100)+'%';
+    endName,arrived?'You made it':fmt1(D-prog)+' mi to go');
+  $('jTitle').textContent=J.label+' · '+comma(len)+' mi';
+  $('mmLeft').textContent='Mile '+fmt1(prog);$('mmPct').textContent=(frac*100).toFixed(1)+'% of the way';$('mmTot').textContent=comma(D)+' mi';
+  $('tripBar').style.width=(frac*100)+'%';
   $('eta').textContent=arrived?'Pick another route to keep going.':'At '+st.target+' RPM, an hour a day gets you to the finish in about '+etaTxt(D-prog)+'.';
-  $('arrived').hidden=!arrived;if(arrived)$('arrived').textContent='You finished '+r.name+'! That\'s '+comma(D)+' miles.';
+  $('arrived').hidden=!arrived;if(arrived)$('arrived').textContent='You finished '+J.label+'! That\'s '+comma(len)+' miles.';
   $('btnNew').textContent=arrived?'Pick next route':'New journey';
   // the sign over the photo: show the next landmark from a mile out, then "now passing" for a short stretch
   const ps=$('phSign');

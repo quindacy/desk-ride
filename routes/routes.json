@@ -42,7 +42,7 @@
       "summary": "Highway 1 from Monterey through Carmel, over Bixby Bridge and down the Big Sur coast to Ragged Point, San Simeon and Cambria.",
       "miles": 105.4,
       "video": {
-        "youtube": "ubexuErXeyI", "title": "Big Sur 4K drive - Highway 1", "channel": "Adventure Theater",
+        "youtube": "ubexuErXeyI", "title": "Big Sur 4K drive - Highway 1", "channel": "Adventure Theater", "fromName": "Point Lobos", "toName": "Elephant Seal Vista Point",
         "note": "Southbound, filmed May 2021. sync = [route mile, video second] pairs from the video's chapter list, placed on the route using OpenStreetMap coordinates.",
         "sync": [[7.5, 0], [14.47, 710], [18.75, 1076], [19.42, 1192], [30.13, 2202], [42.99, 3532], [44.55, 3699], [47.62, 3932], [50.69, 4231], [57.84, 5013], [90.57, 7990]]
       },
