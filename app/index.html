@@ -1,5 +1,8 @@
+<meta charset="utf-8">
 <title>Desk Ride Journeys</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800;900&family=Overpass+Mono:wght@400;600&display=swap">
 <style>
@@ -58,7 +61,7 @@ button,select,input{font:inherit;color:inherit}
 .sim input[type=range]{flex:1;min-width:140px;accent-color:var(--sign)}
 /* map */
 .mapgrid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:16px}
-.map svg{width:100%;height:auto;display:block}
+#map{width:100%;height:auto;display:block}
 .st{fill:var(--state);stroke:var(--line);stroke-width:.8}
 .rt{fill:none;stroke:var(--route);stroke-width:4;stroke-linecap:round;stroke-linejoin:round}
 .rd{fill:none;stroke:var(--done);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
@@ -149,6 +152,49 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
 .lmlist li.passed{color:var(--muted)}
 .lmlist li.passed > span:first-child::before{content:"✓ ";color:var(--done);font-weight:800}
 .lmlist li.next{font-weight:800}
+/* street map (Leaflet + OpenStreetMap) for scenic routes; the SVG map is the fallback */
+.lmap{height:320px;border-radius:8px;border:1px solid var(--line);background:var(--land);z-index:0;font-family:var(--display)}
+.lmap .leaflet-control-attribution{font-size:10px}
+.lmap .leaflet-bar a,.lmap .leaflet-bar a:hover{color:#18221d}
+.mapbtn{display:block;font:inherit;font-size:12px;font-weight:800;padding:6px 10px;background:#fff;color:#18221d;border:0;cursor:pointer;white-space:nowrap}
+.mapbtn+.mapbtn{border-top:1px solid #ccc}
+.mapbtn[aria-pressed="true"]{background:var(--sign);color:#fff}
+.lm-me{background:var(--sign);border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 2px var(--sign),0 1px 4px rgba(0,0,0,.4)}
+/* ride view: on a scenic route the stats, photo, signs and map all fit on one screen */
+@media (min-width:861px){
+  body.riding .wrap{max-width:1560px;gap:12px;padding-top:12px}
+  body.riding h1{font-size:22px}
+  body.riding .panel{padding:12px 16px}
+  body.riding .rpm{font-size:44px}
+  body.riding .gauge{gap:4px}
+  body.riding .stat .v{font-size:26px}
+  body.riding .sim{margin-top:8px;padding-top:8px}
+  body.riding section.map{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:10px 16px;align-items:start;
+    grid-template-rows:auto auto auto auto 1fr auto auto auto auto;
+    grid-template-areas:"msg msg" "photo s1" "photo s2" "photo s3" "photo map" "photo eta" "photo new" "lmh lmh" "lm lm"}
+  body.riding #mapgrid,body.riding .signs{display:contents}
+  body.riding #arrived,body.riding #confirmBox{grid-area:msg;margin:0}
+  body.riding #scene{grid-area:photo;margin:0}
+  body.riding .photo{max-height:calc(100vh - 250px);min-height:300px}
+  body.riding .signs>.hwsign:nth-child(1){grid-area:s1}
+  body.riding .signs>.hwsign:nth-child(2){grid-area:s2}
+  body.riding .signs>.hwsign:nth-child(3){grid-area:s3}
+  body.riding .hwsign{padding:7px 12px}
+  body.riding .hwsign .t{font-size:18px}
+  body.riding .hwsign .d{font-size:14px;margin-top:0}
+  body.riding #mapgrid>div:first-child{grid-area:map;align-self:stretch;display:flex;flex-direction:column;min-height:0}
+  body.riding #mapgrid>div:first-child h2{margin-bottom:6px}
+  body.riding #eta{grid-area:eta}
+  body.riding #btnNew{grid-area:new}
+  body.riding #lmH{grid-area:lmh;margin-top:6px!important}
+  body.riding.bigmap #scene{grid-area:map}
+  body.riding.bigmap #mapgrid>div:first-child{grid-area:photo}
+  body.riding.bigmap .lmap{height:calc(100vh - 330px)!important;min-height:320px}
+  body.riding.bigmap .phsign{display:none}
+  body.riding #lmList{grid-area:lm;max-height:none;display:block;columns:300px 3;column-gap:28px}
+  body.riding #lmList li{break-inside:avoid;margin-bottom:4px}
+}
+@media (min-width:861px) and (max-width:1200px){body.riding section.map{grid-template-columns:minmax(0,1fr) 290px}}
 @media (max-width:860px){.live{grid-template-columns:1fr 1fr}.gauge{grid-column:1/-1}.stat:nth-of-type(2){border-left:0;padding-left:0}.mapgrid,.mapgrid.scenic,.lower{grid-template-columns:1fr}}
 @media (max-width:420px){.rpm{font-size:52px}.stat .v{font-size:24px}.totals .v{font-size:20px}.wpl{display:none}}
 @media (prefers-reduced-motion:reduce){.bar b,.photo img{transition:none}}
@@ -212,6 +258,7 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
       <div>
         <h2 id="jTitle">Plan a journey</h2>
         <svg id="map" role="img" aria-label="Map of the United States with your journey"></svg>
+        <div class="lmap" id="lmap" hidden role="region" aria-label="Street map of the route. Use the plus and minus buttons or the mouse wheel to zoom."></div>
         <div class="milemark"><span id="mmLeft">Mile 0</span><span id="mmPct"></span><span id="mmTot"></span></div>
         <div class="bar" style="margin-top:6px"><b id="tripBar" style="width:0%"></b></div>
       </div>
@@ -479,7 +526,7 @@ function prepRoute(r,f){
   const first=f.frames.find(Boolean)||0;let last=0;
   r.hold=f.frames.map(id=>id?(last=id):(last||first));   // the photo to show at each step: hold the last one through gaps
   const k=r.D/(r.miles||r.D);r.marks=(r.landmarks||[]).map(l=>({...l,mi:Math.min(r.D,l.mi*k)}));
-  r.pts=f.path.map(p=>xy(p[0],p[1]));
+  r.ll=f.path;r.pts=f.path.map(p=>xy(p[0],p[1]));
   r.fullPts=r.pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
   const A=r.waypoints[0],B=r.waypoints[r.waypoints.length-1],pe=r.pts[r.pts.length-1];
   r.a={n:A.name,lat:A.lat,lon:A.lon,x:r.pts[0][0],y:r.pts[0][1]};r.b={n:B.name,lat:B.lat,lon:B.lon,x:pe[0],y:pe[1]};
@@ -612,6 +659,7 @@ function renderTrip(){
   const J=jInfo(),st=S.settings,zr=!plan.open&&J&&J.scenic?J.r:null;
   if((mapK!==1)!==!!zr||(zr&&mapK!==zr.k))setZoom(zr);
   $('scene').hidden=!zr;$('mapgrid').classList.toggle('scenic',!!zr);$('lmH').hidden=$('lmList').hidden=!zr;
+  document.body.classList.toggle('riding',!!zr);if(!zr)document.body.classList.remove('bigmap');if(!zr&&!$('lmap').hidden)showStreetMap(false);
   if(!zr)setSignKeys('You are near','Next stop','Destination');
   $('btnNew').hidden=plan.open||!S.journey;
   if(plan.open){
@@ -644,6 +692,66 @@ function renderTrip(){
   $('btnNew').textContent=arrived?'Plan next journey':'New journey';
   renderOthers();
 }
+/* ---------- street map for scenic routes (Leaflet + OpenStreetMap tiles; falls back to the SVG map) ---------- */
+const LM={map:null,rid:null,follow:false,key:-1},LM_KEY='desk-ride-mapview',GREY='#7d8c85';
+function llAt(r,mi){const f=Math.max(0,Math.min(mi/r.pathStep,r.ll.length-1)),i=Math.floor(f),j=Math.min(r.ll.length-1,i+1),t=f-i,p=r.ll[i],q=r.ll[j];return[p[0]+(q[0]-p[0])*t,p[1]+(q[1]-p[1])*t]}
+function llDone(r,mi){const i=Math.min(r.ll.length-1,Math.floor(Math.max(0,mi/r.pathStep)));return r.ll.slice(0,i+1).concat([llAt(r,mi)])}
+function showStreetMap(on){$('lmap').hidden=!on;$('map').style.display=on?'none':''}   // svg elements ignore .hidden
+function signColor(){return getComputedStyle(document.documentElement).getPropertyValue('--sign').trim()||'#0d6b3e'}
+function renderStreetMap(r,prog,eps){
+  if(!window.L){showStreetMap(false);return}
+  showStreetMap(true);
+  document.body.classList.toggle('bigmap',!!LM.big);
+  if(!LM.map){
+    LM.map=L.map('lmap',{zoomSnap:0.5,wheelPxPerZoomLevel:90});
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(LM.map);
+    const Btns=L.Control.extend({options:{position:'topright'},onAdd(){
+      const d=L.DomUtil.create('div','leaflet-bar');
+      LM.bF=L.DomUtil.create('button','mapbtn',d);LM.bF.type='button';LM.bF.textContent='Follow me';LM.bF.title='Keep the map centered on you as you ride';
+      LM.bW=L.DomUtil.create('button','mapbtn',d);LM.bW.type='button';LM.bW.textContent='Whole route';LM.bW.title='Zoom out to the whole route';
+      LM.bB=L.DomUtil.create('button','mapbtn',d);LM.bB.type='button';LM.bB.title='Swap the map and the street photo';
+      LM.bB.onclick=()=>{LM.big=!LM.big;setBig();saveView()};
+      L.DomEvent.disableClickPropagation(d);
+      LM.bF.onclick=()=>setFollow(true,true);LM.bW.onclick=()=>{setFollow(false);fitRoute()};
+      return d}});
+    new Btns().addTo(LM.map);
+    LM.map.on('dragstart',()=>setFollow(false));
+    LM.map.on('zoomend',saveView);
+    if(window.ResizeObserver)new ResizeObserver(()=>LM.map.invalidateSize()).observe($('lmap'));
+  }
+  const sign=signColor();
+  if(LM.rid!==r.id){
+    if(LM.g)LM.g.remove();LM.g=L.layerGroup().addTo(LM.map);LM.rid=r.id;LM.key=-1;
+    L.polyline(r.ll,{color:GREY,weight:5,opacity:.8}).addTo(LM.g);
+    LM.done=L.polyline([],{color:sign,weight:6}).addTo(LM.g);
+    LM.marks=r.marks.map(m=>L.circleMarker(llAt(r,m.mi),{radius:6,weight:2,color:GREY,fillColor:'#fff',fillOpacity:1}).bindTooltip(m.name+' · mile '+fmt1(m.mi)).addTo(LM.g));
+    LM.me=L.marker(llAt(r,prog),{icon:L.divIcon({className:'lm-me',iconSize:[18,18]}),keyboard:false,interactive:false,zIndexOffset:1000}).addTo(LM.g);
+    LM.map.invalidateSize();
+    const v=loadView();
+    LM.big=!!(v&&v.big);setBig();
+    if(v&&v.rid===r.id&&v.follow){LM.map.setView(llAt(r,prog),v.z||14,{animate:false});setFollow(true)}else{setFollow(false);fitRoute()}
+  }
+  fitStreetMap();
+  const pos=llAt(r,prog);
+  LM.done.setLatLngs(llDone(r,prog));LM.me.setLatLng(pos);
+  const key=r.marks.filter(m=>m.mi<=prog+eps).length;
+  if(key!==LM.key){LM.key=key;r.marks.forEach((m,i)=>LM.marks[i].setStyle(m.mi<=prog+eps?{color:sign,fillColor:sign}:{color:GREY,fillColor:'#fff'}))}
+  if(LM.follow){const s=LM.map.getSize();if(s.x&&LM.map.latLngToContainerPoint(pos).distanceTo(s.divideBy(2))>3)LM.map.panTo(pos,{animate:true,duration:.8})}
+}
+// in the ride view, size the map so the side column ends level with the photo
+function fitStreetMap(){
+  const lm=$('lmap'),b=document.body.classList;if(!b.contains('riding')||b.contains('bigmap')||innerWidth<=860||$('btnNew').hidden){lm.style.height='';return}
+  const gap=$('scene').getBoundingClientRect().bottom-$('btnNew').getBoundingClientRect().bottom,h=Math.max(220,Math.round(lm.offsetHeight+gap));
+  if(Math.abs(h-lm.offsetHeight)>2)lm.style.height=h+'px'}
+function fitRoute(){const r=SC.byId.get(LM.rid);if(r&&LM.map)LM.map.fitBounds(L.latLngBounds(r.ll),{padding:[18,18],animate:false});saveView()}
+function setFollow(on,jump){
+  LM.follow=on;if(LM.bF){LM.bF.setAttribute('aria-pressed',on);LM.bW.setAttribute('aria-pressed',!on)}
+  if(LM.map){LM.map.options.scrollWheelZoom=on?'center':true;LM.map.options.doubleClickZoom=on?'center':true}
+  if(on&&jump){const J=jInfo();if(J&&J.scenic)LM.map.setView(llAt(J.r,J.prog),Math.max(LM.map.getZoom(),14))}
+  saveView()}
+function saveView(){if(!LM.map||!LM.rid)return;try{localStorage.setItem(LM_KEY,JSON.stringify({rid:LM.rid,follow:LM.follow,z:LM.map.getZoom(),big:!!LM.big}))}catch(e){}}
+function setBig(){document.body.classList.toggle('bigmap',!!LM.big);if(LM.bB)LM.bB.textContent=LM.big?'Bigger photo':'Bigger map';if(LM.map)setTimeout(()=>{LM.map.invalidateSize();if(LM.follow){const J=jInfo();if(J&&J.scenic)LM.map.setView(llAt(J.r,J.prog),LM.map.getZoom(),{animate:false})}},50)}
+function loadView(){try{return JSON.parse(localStorage.getItem(LM_KEY)||'null')}catch(e){return null}}
 let lmKey='';
 function renderScenic(J){
   const {r,D,prog,arrived}=J,st=S.settings,k=mapK,eps=0.001;
@@ -678,6 +786,7 @@ function renderScenic(J){
       li.className=m.mi<=prog+eps?'passed':m===next?'next':'';
       x.textContent=m.name;if(m.note){const s=document.createElement('small');s.textContent=m.note;x.append(s)}
       y.textContent='mi '+fmt1(m.mi);li.append(x,y);ul.append(li)})}
+  renderStreetMap(r,prog,eps);
   updatePhoto(r,prog);
 }
 function etaTxt(mi){const perHour=S.settings.target*S.settings.ft*60/5280,days=mi/perHour;return days>60?Math.round(days/30.4)+' months':days>=1.5?Math.ceil(days)+' days':Math.max(1,Math.round(days*60))+' minutes of pedaling'}
