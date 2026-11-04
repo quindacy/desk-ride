@@ -215,10 +215,12 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
       <span class="chip" id="conn"><i></i><span id="connTxt">No sensor</span></span>
       <button class="btn primary" id="btnConnect">Connect sensor</button>
       <button class="btn" id="btnPause" aria-pressed="false">Pause alerts</button>
+      <button class="btn" id="btnEnd" type="button" hidden title="Done for now: save, turn off the sensor and stop the alerts">End ride</button>
     </div>
   </header>
 
   <div class="msg" id="msg" hidden></div>
+  <div class="arrived" id="rideDone" hidden style="margin:0;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center"><span id="rideDoneTxt" style="flex:1;min-width:240px"></span><button class="btn primary" id="btnAgain" type="button">Ride again</button></div>
   <details class="panel" id="btLogBox" hidden><summary class="note" style="cursor:pointer;font-weight:700">Sensor connection details</summary><pre id="btLog" style="margin:10px 0 0;font-family:var(--mono);font-size:12px;white-space:pre-wrap;user-select:all"></pre></details>
 
   <section class="panel" aria-label="Live ride">
@@ -362,7 +364,7 @@ function play(kind){const s=S.settings.sound;
   seq.forEach(([f,t])=>tone(f,t,dur,type,gain))}
 
 /* ---------- Bluetooth cadence (CSC 0x1816 / 0x2A5B) ---------- */
-let btDev=null,attaching=false,btT0=0;
+let btDev=null,attaching=false,btT0=0,btStop=false;   // btStop: the rider ended the ride, so don't reconnect
 function showMsg(t){$('msg').textContent=t;$('msg').hidden=!t}
 // step-by-step log so a failed connection can be diagnosed from what the rider sees
 function btLog(s){const t=btT0?((performance.now()-btT0)/1000).toFixed(1)+'s ':'',L=$('btLog');let x=L.textContent+t+s+'\n';
@@ -370,13 +372,13 @@ function btLog(s){const t=btT0?((performance.now()-btT0)/1000).toFixed(1)+'s ':'
 // Windows can leave gatt.connect() hanging while the sensor sleeps, so give every step a time limit
 function withTimeout(p,ms,what){let t;return Promise.race([p,new Promise((_,bad)=>{t=setTimeout(()=>bad(new Error(what+' timed out')),ms)})]).finally(()=>clearTimeout(t))}
 async function connect(){
-  audio();
+  audio();btStop=false;resumeRide();
   if(!navigator.bluetooth){showMsg("This browser can't reach Bluetooth sensors. Use Chrome or Edge on a computer with Bluetooth turned on.");return}
   try{
     $('btLog').textContent='';btT0=0;btLog(navigator.userAgent);
     const dev=await navigator.bluetooth.requestDevice({filters:[{services:['cycling_speed_and_cadence']}]});
     btT0=performance.now();btLog('Picked "'+(dev.name||'?')+'"'+(dev===btDev?' (same as before)':''));
-    if(dev!==btDev){btDev=dev;btDev.addEventListener('gattserverdisconnected',()=>{btLog('Sensor disconnected');setConn(false,'Disconnected');if(!attaching)setTimeout(reconnect,2000)})}
+    if(dev!==btDev){btDev=dev;btDev.addEventListener('gattserverdisconnected',()=>{btLog('Sensor disconnected'+(btStop?' (ride ended)':''));if(btStop)return;setConn(false,'Disconnected');if(!attaching)setTimeout(reconnect,2000)})}
     setConn(false,'Connecting…');
     await attachRetry();
     showMsg('');
@@ -409,7 +411,7 @@ async function attach(){
   if(live.sim){$('simOn').checked=false;setSim(false)}
 }
 // The sensor sleeps when the pedals stop; keep trying quietly so it reconnects by itself once you pedal again.
-async function reconnect(){if(!btDev||btDev.gatt.connected||attaching)return;setConn(false,'Reconnecting… pedal to wake the sensor');
+async function reconnect(){if(!btDev||btDev.gatt.connected||attaching||btStop)return;setConn(false,'Reconnecting… pedal to wake the sensor');
   try{await attachRetry()}catch(e){setConn(false,'Reconnecting… pedal to wake the sensor');setTimeout(reconnect,5000)}}
 function onCsc(dv){
   const flags=dv.getUint8(0);let i=1;
@@ -436,7 +438,25 @@ function addRevs(n){
 }
 
 /* ---------- simulator ---------- */
-function setSim(on){live.sim=on;$('simRpm').disabled=!on;if(on){audio();setConn(true,'Simulator')}else{live.simRpm=0;$('simRpm').value=0;$('simVal').textContent='0 RPM';if(!btDev||!btDev.gatt.connected)setConn(false,'No sensor')}}
+function setSim(on){if(on)resumeRide();live.sim=on;$('simRpm').disabled=!on;if(on){audio();setConn(true,'Simulator')}else{live.simRpm=0;$('simRpm').value=0;$('simVal').textContent='0 RPM';if(!btDev||!btDev.gatt.connected)setConn(false,'No sensor')}}
+
+/* ---------- ending a ride ---------- */
+// Saves, turns the sensor off (no reconnect loop), stops the alerts and the video, and shows a short summary.
+function endRide(){
+  const mi=live.sesMi,sec=live.sesSec,ft=S.settings.ft;
+  live.ended=true;live.rpm=0;live.belowSince=live.stoppedSince=null;
+  if(live.sim){$('simOn').checked=false;setSim(false)}
+  btStop=true;if(btDev&&btDev.gatt.connected){try{btDev.gatt.disconnect()}catch(e){}}
+  setConn(false,btDev?'Sensor off':'No sensor');
+  dirty=true;saveAll();renderAll();
+  const m=Math.round(sec/60),parts=[];
+  parts.push(mi>0.005?'Nice ride! This session: '+(mi<1?fmt2(mi):fmt1(mi))+' mi in '+(sec<60?Math.round(sec)+' sec':m>=60?Math.floor(m/60)+' hr '+(m%60)+' min':m+' min')+(sec>30?' (average '+Math.round(mi*5280/ft/(sec/60))+' RPM, '+fmt1(mi/(sec/3600))+' mph)':'')+'.':'Ride ended.');
+  parts.push('Today: '+fmt1(today().mi)+' mi.');
+  const J=jInfo();if(J)parts.push(J.arrived?'You finished '+J.label+'.':'You\'re at mile '+fmt1(J.prog)+' of '+J.label+', '+fmt1(J.D-J.prog)+' mi to go. You\'ll pick up right there next time.');
+  parts.push('The sensor is off and alerts are stopped.');
+  $('rideDoneTxt').textContent=parts.join(' ');$('rideDone').hidden=false;
+}
+function resumeRide(){if(!live.ended)return;live.ended=false;live.sesMi=0;live.sesSec=0;live.pedaledOnce=false;live.stoppedSince=live.belowSince=null;$('rideDone').hidden=true}
 
 /* ---------- 1-second tick ---------- */
 let lastTick=performance.now();
@@ -453,6 +473,7 @@ function tick(){
   if(moving&&live.rpm<st.target){if(live.belowSince===null)live.belowSince=now}else if(moving)live.belowSince=null;
 
   // status + alerts
+  if(live.ended){$('status').textContent='Ride ended';$('status').className='status';document.title='Desk Ride Journeys';checkArrival();renderLive();return}
   let status='Waiting',cls='';
   const away=live.stoppedSince!==null&&now-live.stoppedSince>st.away*60000;
   if(!live.pedaledOnce){status='Start pedaling'}
@@ -475,6 +496,7 @@ function renderLive(){
   const max=Math.max(100,st.target*1.6);
   $('rpmBar').style.width=Math.min(100,live.rpm/max*100)+'%';$('rpmTarget').style.left=(st.target/max*100)+'%';
   $('targetNote').textContent='Target '+st.target+' RPM · '+fmt1(st.target*st.ft*60/5280)+' mph';
+  $('btnEnd').hidden=!!live.ended||!(live.pedaledOnce||live.sim||(btDev&&btDev.gatt.connected));
   $('spd').textContent=fmt1(mph);$('sesMi').textContent=fmt2(live.sesMi);
   const s=Math.floor(live.sesSec);$('sesTime').textContent=Math.floor(s/3600)?Math.floor(s/3600)+':'+String(Math.floor(s/60)%60).padStart(2,'0')+':'+String(s%60).padStart(2,'0'):Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
   $('tToday').textContent=fmt1(today().mi);$('tWeek').textContent=fmt1(weekMi());$('tAll').textContent=S.totalMi<100?fmt1(S.totalMi):comma(S.totalMi);
@@ -997,6 +1019,8 @@ function renderAll(){if(!S.journey&&!plan.open)openPlannerDefault();renderPlanne
 
 /* ---------- wire up ---------- */
 $('btnConnect').addEventListener('click',connect);
+$('btnEnd').addEventListener('click',endRide);
+$('btnAgain').addEventListener('click',()=>{if(btDev||navigator.bluetooth)connect();else resumeRide()});
 $('btnPause').addEventListener('click',()=>{live.paused=!live.paused;$('btnPause').textContent=live.paused?'Resume alerts':'Pause alerts';$('btnPause').setAttribute('aria-pressed',live.paused)});
 $('simOn').addEventListener('change',e=>setSim(e.target.checked));
 $('simRpm').addEventListener('input',e=>{live.simRpm=+e.target.value;$('simVal').textContent=live.simRpm+' RPM'});

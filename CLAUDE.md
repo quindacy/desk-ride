@@ -33,6 +33,7 @@ The artifact viewer blocks outside images (so Mapillary photos can't show) and p
 - `build-frames.mjs` grades photos by camera pitch/roll (from `computed_rotation`) and `quality_score`: good ones win, so-so ones (pitch up to 32°, quality ≥ 0.25) fill in only when nothing better is near, bad ones are never used.
 
 - Bluetooth: the sensor sleeps when the pedals stop. Every connection step has a time limit (Windows can leave `gatt.connect()` hanging) and the app keeps retrying every few seconds, so it should reconnect by itself once pedaling resumes. Not yet confirmed on the real sensor.
+- End ride button (header): saves, disconnects the sensor without the reconnect loop, stops alerts and the video, and shows a session summary with a Ride again button.
 
 ## Next steps
 
