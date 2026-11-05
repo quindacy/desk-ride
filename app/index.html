@@ -45,7 +45,7 @@ button,select,input{font:inherit;color:inherit}
 .chip.on i{background:var(--ok)}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
 /* live strip */
-.live{display:grid;grid-template-columns:minmax(220px,1.1fr) repeat(3,minmax(0,1fr));gap:16px;align-items:stretch}
+.live{display:grid;grid-template-columns:minmax(220px,1.1fr) repeat(4,minmax(0,1fr));gap:16px;align-items:stretch}
 .gauge{display:flex;flex-direction:column;gap:6px;justify-content:center}
 .rpm{font-family:var(--mono);font-size:64px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
 .rpm small{font-family:var(--display);font-size:16px;color:var(--muted);font-weight:700;margin-left:6px}
@@ -203,7 +203,7 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
   body.riding #lmList li{break-inside:avoid;margin-bottom:4px}
 }
 @media (min-width:861px) and (max-width:1200px){body.riding section.map{grid-template-columns:minmax(0,1fr) 290px}}
-@media (max-width:860px){.live{grid-template-columns:1fr 1fr}.gauge{grid-column:1/-1}.stat:nth-of-type(2){border-left:0;padding-left:0}.mapgrid,.mapgrid.scenic,.lower{grid-template-columns:1fr}}
+@media (max-width:860px){.live{grid-template-columns:1fr 1fr}.gauge{grid-column:1/-1}.stat:nth-of-type(2),.stat:nth-of-type(4){border-left:0;padding-left:0}.mapgrid,.mapgrid.scenic,.lower{grid-template-columns:1fr}}
 @media (max-width:420px){.rpm{font-size:52px}.stat .v{font-size:24px}.totals .v{font-size:20px}.wpl{display:none}}
 @media (prefers-reduced-motion:reduce){.bar b,.photo img{transition:none}}
 .famcode{margin:10px 0 4px}.famcode label{display:block;font-weight:600;font-size:13px}.famcode label span{display:block;font-weight:400;color:var(--muted);font-size:12px;margin:2px 0 6px}
@@ -236,6 +236,7 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
       <div class="stat"><span class="v" id="spd">0.0</span><span class="l">mph</span></div>
       <div class="stat"><span class="v" id="sesMi">0.00</span><span class="l">miles this session</span></div>
       <div class="stat"><span class="v" id="sesTime">0:00</span><span class="l">pedaling time</span></div>
+      <div class="stat" title="Estimate from your cadence and the weight in Settings"><span class="v" id="sesCal">0</span><span class="l">calories</span></div>
     </div>
     <div class="sim">
       <label for="simOn" style="display:flex;gap:6px;align-items:center;font-weight:700;color:var(--ink)"><input type="checkbox" id="simOn"> Simulator</label>
@@ -328,6 +329,7 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
         <label for="sGrace">Grace period (seconds)<span>How long you can be slow before it chimes.</span><input type="number" id="sGrace" min="3" max="120" step="1"></label>
         <label for="sFt">Distance per pedal turn (feet)<span>Sets your virtual gear. 15 ft is a realistic easy ride: about 12 mph at 70 RPM.</span><input type="number" id="sFt" min="5" max="40" step="0.5"></label>
         <label for="sAway">Auto-pause after stopped (minutes)<span>Stops nagging when you've stepped away.</span><input type="number" id="sAway" min="1" max="60" step="1"></label>
+        <label for="sLb">Your weight (pounds)<span>Used only to estimate calories. Stays on this computer.</span><input type="number" id="sLb" min="50" max="400" step="1"></label>
         <label for="sSound">Alert sound<select id="sSound"><option value="chime">Chime</option><option value="beep">Beep</option><option value="block">Woodblock</option></select></label>
         <label for="sVol">Volume<input type="range" id="sVol" min="0" max="1" step="0.05"></label>
         <label for="sNick">Your name on the leaderboard<input type="text" id="sNick" maxlength="24" placeholder="e.g. Dad"></label>
@@ -345,9 +347,9 @@ const fmt1 = n => n.toFixed(1), fmt2 = n => n.toFixed(2);
 const comma = n => Math.round(n).toLocaleString('en-US');
 
 /* ---------- state ---------- */
-const DEFAULTS = {target:50, grace:10, ft:15, away:5, sound:'chime', vol:0.6, nick:'', mode:'separate'};
+const DEFAULTS = {target:50, grace:10, ft:15, lb:170, away:5, sound:'chime', vol:0.6, nick:'', mode:'separate'};
 let S = {settings:{...DEFAULTS}, totalMi:0, days:{}, journey:null, done:[]};   // persisted
-const live = {rpm:0, revs:null, lastEvt:null, lastRevAt:0, sesMi:0, sesSec:0, belowSince:null, stoppedSince:null, lastAlert:0, pedaledOnce:false, paused:false, sim:false, simRpm:0, simAcc:0};
+const live = {rpm:0, revs:null, lastEvt:null, lastRevAt:0, sesMi:0, sesSec:0, sesCal:0, belowSince:null, stoppedSince:null, lastAlert:0, pedaledOnce:false, paused:false, sim:false, simRpm:0, simAcc:0};
 let dirty = false, db = null, uid = null, userCap = null, riders = [];
 
 const dayKey = (d=new Date()) => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -443,6 +445,11 @@ function addRevs(n){
   live.sesMi+=mi;S.totalMi+=mi;today().mi+=mi;live.pedaledOnce=true;dirty=true;
 }
 
+/* ---------- calories (estimate) ---------- */
+// Easy desk pedaling is about 3.5 METs at 50 RPM, a bit more when you spin faster.
+// kcal/min = MET x 3.5 x kg / 200 (the standard formula).
+function calPerSec(rpm){const met=Math.min(7,1.5+0.04*rpm),kg=(S.settings.lb||170)*0.4536;return met*3.5*kg/200/60}
+
 /* ---------- simulator ---------- */
 function setSim(on){if(on)resumeRide();live.sim=on;$('simRpm').disabled=!on;if(on){audio();setConn(true,'Simulator')}else{live.simRpm=0;$('simRpm').value=0;$('simVal').textContent='0 RPM';if(!btDev||!btDev.gatt.connected)setConn(false,'No sensor')}}
 
@@ -456,13 +463,13 @@ function endRide(){
   setConn(false,btDev?'Sensor off':'No sensor');
   dirty=true;saveAll();renderAll();
   const m=Math.round(sec/60),parts=[];
-  parts.push(mi>0.005?'Nice ride! This session: '+(mi<1?fmt2(mi):fmt1(mi))+' mi in '+(sec<60?Math.round(sec)+' sec':m>=60?Math.floor(m/60)+' hr '+(m%60)+' min':m+' min')+(sec>30?' (average '+Math.round(mi*5280/ft/(sec/60))+' RPM, '+fmt1(mi/(sec/3600))+' mph)':'')+'.':'Ride paused.');
-  parts.push('Today: '+fmt1(today().mi)+' mi.');
+  parts.push(mi>0.005?'Nice ride! This session: '+(mi<1?fmt2(mi):fmt1(mi))+' mi in '+(sec<60?Math.round(sec)+' sec':m>=60?Math.floor(m/60)+' hr '+(m%60)+' min':m+' min')+(sec>30?' (average '+Math.round(mi*5280/ft/(sec/60))+' RPM, '+fmt1(mi/(sec/3600))+' mph, about '+Math.round(live.sesCal)+' calories)':'')+'.':'Ride paused.');
+  parts.push('Today: '+fmt1(today().mi)+' mi'+(today().kcal>=1?', about '+Math.round(today().kcal)+' calories':'')+'.');
   const J=jInfo();if(J)parts.push(J.arrived?'You finished '+J.label+'.':'You\'re at mile '+fmt1(J.trip)+' of '+J.label+', '+fmt1(J.D-J.prog)+' mi to go. You\'ll pick up right there next time.');
   parts.push('The sensor is off and alerts are stopped.');
   $('rideDoneTxt').textContent=parts.join(' ');$('rideDone').hidden=false;
 }
-function resumeRide(){if(!live.ended)return;live.ended=false;live.sesMi=0;live.sesSec=0;live.pedaledOnce=false;live.stoppedSince=live.belowSince=null;$('rideDone').hidden=true}
+function resumeRide(){if(!live.ended)return;live.ended=false;live.sesMi=0;live.sesSec=0;live.sesCal=0;live.pedaledOnce=false;live.stoppedSince=live.belowSince=null;$('rideDone').hidden=true}
 
 /* ---------- 1-second tick ---------- */
 let lastTick=performance.now();
@@ -474,7 +481,7 @@ function tick(){
     live.rpm=live.simRpm;
   }else if(now-live.lastRevAt>3000){live.rpm=0}
   const st=S.settings,moving=live.rpm>0.5;
-  if(moving){live.sesSec+=dt;today().min+=dt/60;live.stoppedSince=null}
+  if(moving){live.sesSec+=dt;today().min+=dt/60;const c=calPerSec(live.rpm)*dt;live.sesCal+=c;today().kcal=(today().kcal||0)+c;live.stoppedSince=null}
   else if(live.stoppedSince===null)live.stoppedSince=now;
   if(moving&&live.rpm<st.target){if(live.belowSince===null)live.belowSince=now}else if(moving)live.belowSince=null;
 
@@ -503,7 +510,7 @@ function renderLive(){
   $('rpmBar').style.width=Math.min(100,live.rpm/max*100)+'%';$('rpmTarget').style.left=(st.target/max*100)+'%';
   $('targetNote').textContent='Target '+st.target+' RPM · '+fmt1(st.target*st.ft*60/5280)+' mph';
   $('btnEnd').hidden=!!live.ended||!(live.pedaledOnce||live.sim||btDev);
-  $('spd').textContent=fmt1(mph);$('sesMi').textContent=fmt2(live.sesMi);
+  $('spd').textContent=fmt1(mph);$('sesMi').textContent=fmt2(live.sesMi);$('sesCal').textContent=Math.round(live.sesCal);
   const s=Math.floor(live.sesSec);$('sesTime').textContent=Math.floor(s/3600)?Math.floor(s/3600)+':'+String(Math.floor(s/60)%60).padStart(2,'0')+':'+String(s%60).padStart(2,'0'):Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
   $('tToday').textContent=fmt1(today().mi);$('tWeek').textContent=fmt1(weekMi());$('tAll').textContent=S.totalMi<100?fmt1(S.totalMi):comma(S.totalMi);
   renderTrip();
@@ -1037,11 +1044,11 @@ async function initCloud(){
 }
 
 /* ---------- settings form ---------- */
-const FIELDS={sTarget:'target',sGrace:'grace',sFt:'ft',sAway:'away',sSound:'sound',sVol:'vol',sNick:'nick'};
+const FIELDS={sTarget:'target',sGrace:'grace',sFt:'ft',sAway:'away',sLb:'lb',sSound:'sound',sVol:'vol',sNick:'nick'};
 function applySettingsToForm(){for(const id in FIELDS)$(id).value=S.settings[FIELDS[id]];setModeButtons()}
 function setModeButtons(){const m=S.settings.mode;$('modeSep').setAttribute('aria-pressed',m==='separate');$('modeTog').setAttribute('aria-pressed',m==='together')}
 for(const id in FIELDS){$(id).addEventListener('change',()=>{const k=FIELDS[id];let v=$(id).value;
-  if(['target','grace','ft','away','vol'].includes(k)){v=parseFloat(v);const e=$(id);if(isNaN(v))v=DEFAULTS[k];v=Math.max(+e.min,Math.min(+e.max,v));e.value=v}
+  if(['target','grace','ft','away','vol','lb'].includes(k)){v=parseFloat(v);const e=$(id);if(isNaN(v))v=DEFAULTS[k];v=Math.max(+e.min,Math.min(+e.max,v));e.value=v}
   S.settings[k]=v;dirty=true;renderAll();if(k==='nick')renderFamily();saveAll()})}
 
 function renderAll(){if(!S.journey&&!plan.open)openPlannerDefault();renderPlanner();renderLive();renderChart();renderFamily();renderDone()}
