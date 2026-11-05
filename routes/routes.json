@@ -5,35 +5,68 @@
     {
       "id": "sedona-grand-canyon",
       "name": "Red Rock to the Rim",
-      "summary": "Sedona up Oak Creek Canyon to Flagstaff, out to the Grand Canyon's South Rim, east along the rim past Desert View, and back to Flagstaff by way of Cameron.",
-      "miles": 227.3,
+      "summary": "Sedona up Oak Creek Canyon to Flagstaff, out Highway 180 past the San Francisco Peaks to the Grand Canyon's South Rim, east along the rim past Desert View, and back to Flagstaff by way of Cameron.",
+      "miles": 220.1,
+      "videos": [
+        {
+          "youtube": "XhKSbMF6Qm8", "title": "Sedona Arizona Scenic Drive - Oak Creek Canyon to Flagstaff 4K Autumn Colors", "channel": "AdventureEveryDay", "fromName": "Sedona", "toName": "Oak Creek Vista",
+          "note": "Northbound on 89A, filmed in early November. Placed from the chapter list. The video stops at Oak Creek Vista for about 2.5 minutes, so it is split there.",
+          "sync": [[0.35, 60], [1.55, 202], [13.0, 1482], [15.3, 1845]]
+        },
+        {
+          "youtube": "XhKSbMF6Qm8", "title": "Sedona Arizona Scenic Drive - Oak Creek Canyon to Flagstaff 4K Autumn Colors", "channel": "AdventureEveryDay", "fromName": "Oak Creek Vista", "toName": "Flagstaff",
+          "note": "After the stop at Oak Creek Vista; ends where the video turns onto I-17.",
+          "sync": [[15.3, 1990], [26.0, 2560]]
+        },
+        {
+          "youtube": "psViPelEbLo", "title": "Flagstaff to Grand Canyon 4K Drive | Scenic AZ Route", "channel": "Asphalt Cruiser POV", "fromName": "Flagstaff (US 180)", "toName": "Grand Canyon Village turnoff",
+          "note": "US 180 to the South Rim, then Desert View Drive. No chapters, so placed from storyboard frames: Flagstaff edge at 4:00, Valle junction at 56:00, Tusayan at 78:00, the Watchtower at the end. The video skips the Grand Canyon Village loop.",
+          "sync": [[32.0, 240], [80.7, 3360], [102.87, 4700], [107.5, 5110]]
+        },
+        {
+          "youtube": "psViPelEbLo", "title": "Flagstaff to Grand Canyon 4K Drive | Scenic AZ Route", "channel": "Asphalt Cruiser POV", "fromName": "Mather Point", "toName": "Desert View",
+          "note": "Desert View Drive east to the Watchtower.",
+          "sync": [[111.0, 5110], [133.9, 7140]]
+        },
+        {
+          "youtube": "axc_Mq4H3Qg", "title": "Grand Canyon to Flagstaff: 4K Scenic Drive (Routes 64 & 89)", "channel": "Asphalt Cruiser POV", "fromName": "Desert View", "toName": "Cameron junction",
+          "note": "AZ 64 east from the Watchtower, placed from storyboard frames (US 89 junction at 34:30). The video turns south at the junction and skips the trip up to the Cameron Trading Post.",
+          "sync": [[133.9, 30], [165.8, 2070]]
+        },
+        {
+          "youtube": "axc_Mq4H3Qg", "title": "Grand Canyon to Flagstaff: 4K Scenic Drive (Routes 64 & 89)", "channel": "Asphalt Cruiser POV", "fromName": "Cameron junction", "toName": "Flagstaff",
+          "note": "US 89 south to the edge of Flagstaff.",
+          "sync": [[168.9, 2070], [215.5, 4920]]
+        }
+      ],
       "waypoints": [
         { "name": "Sedona, AZ", "lat": 34.8697, "lon": -111.7610 },
         { "name": "Flagstaff, AZ", "lat": 35.1983, "lon": -111.6513 },
+        { "name": "Kendrick Park, AZ (US 180)", "lat": 35.4138, "lon": -111.7544 },
         { "name": "Grand Canyon Village, AZ", "lat": 36.0544, "lon": -112.1401 },
         { "name": "Desert View, AZ", "lat": 36.0433, "lon": -111.8260 },
         { "name": "Cameron, AZ", "lat": 35.8758, "lon": -111.4135 },
         { "name": "Flagstaff, AZ", "lat": 35.1983, "lon": -111.6513 }
       ],
-      "coverage": { "percent": 99.1, "longestGapMi": 0.8, "medianPhotoYear": 2017, "photoYears": "2015-2026" },
+      "coverage": { "percent": 98.5, "longestGapMi": 1.2, "medianPhotoYear": 2016 },
       "landmarks": [
         { "mi": 0.0, "name": "Sedona" },
         { "mi": 2.7, "name": "Schnebly Hill Formation" },
         { "mi": 4.0, "name": "Oak Creek Canyon" },
-        { "mi": 6.8, "name": "Slide Rock State Park" },
-        { "mi": 29.6, "name": "Downtown Flagstaff" },
-        { "mi": 29.8, "name": "Lowell Observatory", "note": "Where Pluto was discovered" },
-        { "mi": 59.9, "name": "Williams", "note": "Route 66 town" },
-        { "mi": 87.9, "name": "Bedrock City" },
-        { "mi": 108.8, "name": "Tusayan" },
-        { "mi": 116.7, "name": "El Tovar Hotel and Hopi House" },
-        { "mi": 119.6, "name": "Mather Point" },
-        { "mi": 130.8, "name": "Grandview Point" },
-        { "mi": 138.2, "name": "Tusayan Ruins" },
-        { "mi": 141.4, "name": "Desert View Watchtower" },
-        { "mi": 174.4, "name": "Cameron Suspension Bridge" },
-        { "mi": 221.1, "name": "Elden Pueblo" },
-        { "mi": 227.3, "name": "Flagstaff", "note": "Finish" }
+        { "mi": 6.7, "name": "Slide Rock State Park" },
+        { "mi": 29.3, "name": "Downtown Flagstaff" },
+        { "mi": 29.5, "name": "Lowell Observatory", "note": "Where Pluto was discovered" },
+        { "mi": 50.1, "name": "Kendrick Park", "note": "Meadow below the San Francisco Peaks" },
+        { "mi": 80.6, "name": "Bedrock City" },
+        { "mi": 101.5, "name": "Tusayan" },
+        { "mi": 108.9, "name": "El Tovar Hotel and Hopi House" },
+        { "mi": 112.3, "name": "Mather Point" },
+        { "mi": 123.4, "name": "Grandview Point" },
+        { "mi": 130.9, "name": "Tusayan Ruins" },
+        { "mi": 133.9, "name": "Desert View Watchtower" },
+        { "mi": 166.9, "name": "Cameron Suspension Bridge" },
+        { "mi": 213.8, "name": "Elden Pueblo" },
+        { "mi": 220.1, "name": "Flagstaff", "note": "Finish" }
       ]
     },
     {
@@ -84,6 +117,23 @@
       "name": "Zion to Capitol Reef",
       "summary": "Through Zion on the Zion-Mount Carmel Highway, north to Bryce Canyon, then Scenic Byway 12 past Escalante, Calf Creek and Boulder to Torrey and Capitol Reef.",
       "miles": 214.0,
+      "videos": [
+        {
+          "youtube": "th4ykU59Np8", "title": "Zion to Bryce Canyon National Park Complete Utah Scenic Drive 4K", "channel": "AdventureEveryDay", "fromName": "Zion tunnel (east end)", "toName": "Bryce Canyon turnoff",
+          "note": "Eastbound from the Zion-Mount Carmel Tunnel on UT-9, US-89 and UT-12, filmed in spring snow. Placed from the chapter list and storyboard frames. The video passes the Bryce Canyon turnoff, so the side trip to Bryce Lodge shows photos.",
+          "sync": [[7.7, 66], [12.9, 490], [25.49, 1251], [34.0, 1776], [60.6, 3309], [68.9, 3805], [82.4, 4725]]
+        },
+        {
+          "youtube": "th4ykU59Np8", "title": "Zion to Bryce Canyon National Park Complete Utah Scenic Drive 4K", "channel": "AdventureEveryDay", "fromName": "Bryce Canyon turnoff", "toName": "Bryce Canyon park sign",
+          "note": "Continues east on UT-12 after the side trip.",
+          "sync": [[92.5, 4725], [94.4, 4840]]
+        },
+        {
+          "youtube": "-6Ycfg41XjE", "title": "Bryce Canyon to Capitol Reef Complete Drive | Scenic Byway 12 | 4K Utah Driving Adventure", "channel": "World of Drives", "fromName": "Bryce Canyon park sign", "toName": "Capitol Reef Visitor Center",
+          "note": "Eastbound on Scenic Byway 12 and SR-24, filmed in summer. Placed from the chapter list plus Mossy Cave (4:00) and Tropic (8:30) seen in the frames.",
+          "sync": [[94.4, 100], [96.1, 240], [99.92, 510], [104.5, 830], [108.0, 1060], [120.07, 1879], [138.0, 2930], [148.41, 3679], [152.46, 4103], [177.0, 6260], [203.78, 8419], [211.11, 8878], [213.56, 9091]]
+        }
+      ],
       "waypoints": [
         { "name": "Springdale, UT", "lat": 37.1889, "lon": -112.9986 },
         { "name": "Mount Carmel Junction, UT", "lat": 37.2269, "lon": -112.6770 },

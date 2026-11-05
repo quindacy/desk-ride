@@ -536,7 +536,7 @@ function linePts(a,b,f=1){const out=[],N=48;for(let i=0;i<=N;i++){const p=interp
 function jInfo(){
   const j=S.journey;if(!j)return null;const raw=Math.max(0,S.totalMi-j.start);
   if(j.route){const r=SC.byId.get(j.route);if(!r)return null;
-    const from=j.from||0,to=Math.min(j.to||r.D,r.D),v=j.to&&r.video?r.video:null,pos=from+raw;   // from/to: a ride over part of the route (the video stretch)
+    const from=j.from||0,to=Math.min(j.to||r.D,r.D),v=j.to&&r.videos.length?r.videos[r.videos.length-1]:null,pos=from+raw;   // from/to: a ride over part of the route (the video stretch)
     return{scenic:true,r,a:r.a,b:r.b,D:to,from,len:to-from,endName:v&&v.toName?v.toName:r.b.n.split(',')[0],prog:Math.min(pos,to),arrived:pos>=to,label:r.name+(v?' (video)':'')}}
   const a=cityOf(j.a),b=cityOf(j.b);if(!a||!b)return null;
   const D=routeMiles(a,b);return{a,b,D,prog:Math.min(raw,D),arrived:raw>=D,label:a.n.split(',')[0]+' to '+b.n.split(',')[0]};
@@ -565,6 +565,7 @@ function prepRoute(r,f){
   const first=f.frames.find(Boolean)||0;let last=0;
   r.hold=f.frames.map(id=>id?(last=id):(last||first));   // the photo to show at each step: hold the last one through gaps
   const k=r.D/(r.miles||r.D);r.marks=(r.landmarks||[]).map(l=>({...l,mi:Math.min(r.D,l.mi*k)}));
+  r.videos=(r.videos||(r.video?[r.video]:[])).filter(v=>v.sync&&v.sync.length>1).sort((a,b)=>a.sync[0][0]-b.sync[0][0]);   // one or more driving videos, in route order
   r.ll=f.path;r.pts=f.path.map(p=>xy(p[0],p[1]));
   r.fullPts=r.pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
   const A=r.waypoints[0],B=r.waypoints[r.waypoints.length-1],pe=r.pts[r.pts.length-1];
@@ -588,7 +589,8 @@ function renderRouteList(){
     const sp=vidSpan(r),btns=document.createElement('div');btns.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:auto';
     const mk=(txt,primary,fn)=>{const b=document.createElement('button');b.className='btn'+(primary?' primary':'');b.type='button';b.textContent=txt;b.addEventListener('click',fn);btns.append(b)};
     c.append(h,p,f);
-    if(sp){const v=document.createElement('div');v.className='facts';v.textContent='Driving video: '+(r.video.fromName||'mile '+fmt1(sp[0]))+' to '+(r.video.toName||'mile '+fmt1(sp[1]))+', '+comma(sp[1]-sp[0])+' mi';c.append(v);
+    if(sp){const v=document.createElement('div'),V=r.videos,vmi=V.reduce((t,x)=>t+x.sync[x.sync.length-1][0]-x.sync[0][0],0),nV=new Set(V.map(x=>x.youtube)).size;v.className='facts';
+      v.textContent='Driving video: '+(V[0].fromName||'mile '+fmt1(sp[0]))+' to '+(V[V.length-1].toName||'mile '+fmt1(sp[1]))+(nV>1?' ('+nV+' videos, '+comma(vmi)+' mi of video)':', '+comma(sp[1]-sp[0])+' mi');c.append(v);
       mk('Ride with video ('+comma(sp[1]-sp[0])+' mi)',true,()=>startScenic(r.id,sp));mk('Full route ('+comma(r.D)+' mi)',false,()=>startScenic(r.id))}
     else mk('Ride this route',true,()=>startScenic(r.id));
     c.append(btns);box.append(c)});
@@ -649,14 +651,17 @@ function updatePhoto(r,prog){
 }
 
 /* ---------- driving video (YouTube): pedaling plays it, your speed sets the playback speed ---------- */
-// route.video.sync is a list of [route mile, video second] pairs; between them the video is assumed to move at a steady speed.
+// A route has one or more videos (route.videos, or the older single route.video). Each video's sync is a list of
+// [route mile, video second] pairs; between them the video is assumed to move at a steady speed. Gaps between videos show photos.
 const VID_KEY='desk-ride-view',YV={api:null,player:null,ready:false,state:-1,rate:1,rates:null,vid:null,err:null,lastSeek:0,on:false};
 function viewPref(){try{return localStorage.getItem(VID_KEY)||'video'}catch(e){return 'video'}}
-function vidSpan(r){const s=r.video&&r.video.sync;return s&&s.length>1?[s[0][0],s[s.length-1][0]]:null}
-function vidSeg(r,mi){const s=r.video.sync;let i=1;while(i<s.length-1&&mi>s[i][0])i++;return[s[i-1],s[i]]}
-function vidTime(r,mi){const[a,b]=vidSeg(r,mi);return a[1]+(b[1]-a[1])*(mi-a[0])/(b[0]-a[0])}
-function vidSecPerMi(r,mi){const[a,b]=vidSeg(r,mi);return(b[1]-a[1])/(b[0]-a[0])}
-function useVideo(r,prog){const sp=vidSpan(r);return!!(sp&&viewPref()==='video'&&!YV.err&&prog>=sp[0]&&prog<sp[1])}
+const vEnds=v=>[v.sync[0][0],v.sync[v.sync.length-1][0]];
+function vidSpan(r){const V=r.videos;return V&&V.length?[vEnds(V[0])[0],vEnds(V[V.length-1])[1]]:null}
+function vidAt(r,mi){return(r.videos||[]).find(v=>{const e=vEnds(v);return mi>=e[0]&&mi<e[1]})||null}
+function vidSeg(v,mi){const s=v.sync;let i=1;while(i<s.length-1&&mi>s[i][0])i++;return[s[i-1],s[i]]}
+function vidTime(v,mi){const[a,b]=vidSeg(v,mi);return a[1]+(b[1]-a[1])*(mi-a[0])/(b[0]-a[0])}
+function vidSecPerMi(v,mi){const[a,b]=vidSeg(v,mi);return(b[1]-a[1])/(b[0]-a[0])}
+function useVideo(r,prog){return!!(viewPref()==='video'&&!YV.err&&vidAt(r,prog))}
 function loadYT(){
   if(!YV.api)YV.api=new Promise(res=>{if(window.YT&&YT.Player)return res(YT);
     const prev=window.onYouTubeIframeAPIReady;window.onYouTubeIframeAPIReady=()=>{if(prev)prev();res(window.YT)};
@@ -669,15 +674,15 @@ function showVideo(on){
   if(on){$('phMsg').textContent=''}
   else{if(YV.player&&YV.ready&&YV.state===1)YV.player.pauseVideo();PH.want=null;$('phAttr').textContent=''}   // PH.want=null makes the photo reload
 }
-function vidAttr(r,T){const a=$('phAttr');a.textContent='Video: '+r.video.channel+' · YouTube';a.href='https://www.youtube.com/watch?v='+r.video.youtube+'&t='+Math.floor(T)+'s'}
+function vidAttr(v,T){const a=$('phAttr');a.textContent='Video: '+v.channel+' · YouTube';a.href='https://www.youtube.com/watch?v='+v.youtube+'&t='+Math.floor(T)+'s'}
 function updateVideo(r,prog){
   showVideo(true);
-  const T=vidTime(r,prog);vidAttr(r,T);
+  const v=vidAt(r,prog),T=vidTime(v,prog);vidAttr(v,T);
   $('phMile').textContent='Mile '+fmt1(prog)+' of '+fmt1(PH.end||r.D);
   if(!YV.player){
     if(!YV.loading){YV.loading=true;$('phMsg').textContent='Loading the video…';
       loadYT().then(Y=>{if(!Y){YV.err='load';renderTrip();return}
-        YV.vid=r.video.youtube;
+        YV.vid=v.youtube;
         YV.player=new Y.Player('ytPlayer',{videoId:YV.vid,playerVars:{controls:0,disablekb:1,fs:0,rel:0,playsinline:1,iv_load_policy:3,mute:1,start:Math.floor(T)},
           events:{onReady:()=>{YV.ready=true;YV.player.mute();YV.rates=YV.player.getAvailablePlaybackRates()||null;$('phMsg').textContent=''},
             onStateChange:e=>{YV.state=e.data},
@@ -686,7 +691,7 @@ function updateVideo(r,prog){
     return}
   if(!YV.ready)return;
   const P=YV.player,now=Date.now();
-  if(YV.vid!==r.video.youtube){YV.vid=r.video.youtube;P.cueVideoById({videoId:YV.vid,startSeconds:T});YV.lastSeek=now;return}
+  if(YV.vid!==v.youtube){YV.vid=v.youtube;P.cueVideoById({videoId:YV.vid,startSeconds:T});YV.lastSeek=now;return}
   const c=P.getCurrentTime()||0,err=c-T,moving=live.rpm>0.5;   // err > 0: the video is ahead of you
   if(!moving){
     if(YV.state===1||YV.state===3)P.pauseVideo();
@@ -695,7 +700,7 @@ function updateVideo(r,prog){
     return}
   if(Math.abs(err)>15&&now-YV.lastSeek>4000){P.seekTo(T,true);YV.lastSeek=now;return}
   if(err>1.5){if(YV.state===1)P.pauseVideo();return}   // you're slower than the slowest playback speed: wait for you to catch up
-  const mph=live.rpm*S.settings.ft*60/5280,need=mph/3600*vidSecPerMi(r,prog),want=need*(1-0.15*err);
+  const mph=live.rpm*S.settings.ft*60/5280,need=mph/3600*vidSecPerMi(v,prog),want=need*(1-0.15*err);
   const rates=(YV.rates&&YV.rates.length?YV.rates:[0.25,0.5,0.75,1,1.25,1.5,1.75,2]).filter(x=>x<=2);
   let best=rates[0];for(const x of rates)if(Math.abs(x-want)<Math.abs(best-want))best=x;
   if(best!==YV.rate){P.setPlaybackRate(best);YV.rate=best}
@@ -706,7 +711,8 @@ function renderVToggle(r){
   if(has)$('vToggle').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===v));
 }
 function photoNote(r,prog){const sp=vidSpan(r);if(!sp||viewPref()!=='video'||YV.err)return;
-  if(prog<sp[0])$('phMile').textContent+=' · video starts at mile '+fmt1(sp[0]);else if(prog>=sp[1])$('phMile').textContent+=' · video ended, back to photos'}
+  const nx=r.videos.find(v=>vEnds(v)[0]>prog);
+  if(nx)$('phMile').textContent+=' · '+(prog<sp[0]?'video starts':'next video')+' at mile '+fmt1(vEnds(nx)[0]);else if(prog>=sp[1])$('phMile').textContent+=' · video ended, back to photos'}
 
 /* ---------- map ---------- */
 const NS='http://www.w3.org/2000/svg';
