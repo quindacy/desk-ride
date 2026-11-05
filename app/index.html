@@ -452,7 +452,7 @@ function endRide(){
   const m=Math.round(sec/60),parts=[];
   parts.push(mi>0.005?'Nice ride! This session: '+(mi<1?fmt2(mi):fmt1(mi))+' mi in '+(sec<60?Math.round(sec)+' sec':m>=60?Math.floor(m/60)+' hr '+(m%60)+' min':m+' min')+(sec>30?' (average '+Math.round(mi*5280/ft/(sec/60))+' RPM, '+fmt1(mi/(sec/3600))+' mph)':'')+'.':'Ride paused.');
   parts.push('Today: '+fmt1(today().mi)+' mi.');
-  const J=jInfo();if(J)parts.push(J.arrived?'You finished '+J.label+'.':'You\'re at mile '+fmt1(J.prog)+' of '+J.label+', '+fmt1(J.D-J.prog)+' mi to go. You\'ll pick up right there next time.');
+  const J=jInfo();if(J)parts.push(J.arrived?'You finished '+J.label+'.':'You\'re at mile '+fmt1(J.trip)+' of '+J.label+', '+fmt1(J.D-J.prog)+' mi to go. You\'ll pick up right there next time.');
   parts.push('The sensor is off and alerts are stopped.');
   $('rideDoneTxt').textContent=parts.join(' ');$('rideDone').hidden=false;
 }
@@ -537,9 +537,10 @@ function jInfo(){
   const j=S.journey;if(!j)return null;const raw=Math.max(0,S.totalMi-j.start);
   if(j.route){const r=SC.byId.get(j.route);if(!r)return null;
     const from=j.from||0,to=Math.min(j.to||r.D,r.D),v=j.to&&r.videos.length?r.videos[r.videos.length-1]:null,pos=from+raw;   // from/to: a ride over part of the route (the video stretch)
-    return{scenic:true,r,a:r.a,b:r.b,D:to,from,len:to-from,endName:v&&v.toName?v.toName:r.b.n.split(',')[0],prog:Math.min(pos,to),arrived:pos>=to,label:r.name+(v?' (video)':'')}}
+    const v0=j.to&&r.videos.length?r.videos[0]:null,prog=Math.min(pos,to);
+    return{scenic:true,r,a:r.a,b:r.b,D:to,from,len:to-from,startName:v0&&v0.fromName?v0.fromName:r.a.n.split(',')[0],endName:v&&v.toName?v.toName:r.b.n.split(',')[0],prog,trip:prog-from,arrived:pos>=to,label:r.name}}
   const a=cityOf(j.a),b=cityOf(j.b);if(!a||!b)return null;
-  const D=routeMiles(a,b);return{a,b,D,prog:Math.min(raw,D),arrived:raw>=D,label:a.n.split(',')[0]+' to '+b.n.split(',')[0]};
+  const D=routeMiles(a,b);return{a,b,D,from:0,len:D,prog:Math.min(raw,D),trip:Math.min(raw,D),arrived:raw>=D,label:a.n.split(',')[0]+' to '+b.n.split(',')[0]};
 }
 function checkArrival(){
   const J=jInfo();if(!J||!J.arrived||S.journey.ended)return;
@@ -585,13 +586,14 @@ function renderRouteList(){
   SC.routes.forEach(r=>{const c=document.createElement('div');c.className='rcard';
     const h=document.createElement('h3');h.textContent=r.name;
     const p=document.createElement('p');p.textContent=r.summary;
-    const f=document.createElement('div');f.className='facts';f.textContent=comma(r.D)+' mi · photos on '+Math.round(r.coverage)+'% of the road · '+r.marks.length+' landmarks';
-    const sp=vidSpan(r),btns=document.createElement('div');btns.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:auto';
+    const sp=vidSpan(r),f=document.createElement('div');f.className='facts';
+    f.textContent=sp?comma(sp[1]-sp[0])+' mi · '+r.marks.filter(m=>m.mi>=sp[0]-0.05&&m.mi<=sp[1]+0.05).length+' landmarks':comma(r.D)+' mi · photos on '+Math.round(r.coverage)+'% of the road · '+r.marks.length+' landmarks';
+    const btns=document.createElement('div');btns.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:auto';
     const mk=(txt,primary,fn)=>{const b=document.createElement('button');b.className='btn'+(primary?' primary':'');b.type='button';b.textContent=txt;b.addEventListener('click',fn);btns.append(b)};
     c.append(h,p,f);
-    if(sp){const v=document.createElement('div'),V=r.videos,vmi=V.reduce((t,x)=>t+x.sync[x.sync.length-1][0]-x.sync[0][0],0),nV=new Set(V.map(x=>x.youtube)).size;v.className='facts';
-      v.textContent='Driving video: '+(V[0].fromName||'mile '+fmt1(sp[0]))+' to '+(V[V.length-1].toName||'mile '+fmt1(sp[1]))+(nV>1?' ('+nV+' videos, '+comma(vmi)+' mi of video)':', '+comma(sp[1]-sp[0])+' mi');c.append(v);
-      mk('Ride with video ('+comma(sp[1]-sp[0])+' mi)',true,()=>startScenic(r.id,sp));mk('Full route ('+comma(r.D)+' mi)',false,()=>startScenic(r.id))}
+    if(sp){const v=document.createElement('div'),V=r.videos,vmi=V.reduce((t,x)=>t+x.sync[x.sync.length-1][0]-x.sync[0][0],0),ch=[...new Set(V.map(x=>x.channel))];v.className='facts';
+      v.textContent=(V[0].fromName||'mile '+fmt1(sp[0]))+' to '+(V[V.length-1].toName||'mile '+fmt1(sp[1]))+'. Driving video'+(vmi<sp[1]-sp[0]-1?' on '+comma(vmi)+' mi, street photos on the rest':' the whole way')+' (video: '+ch.join(', ')+').';c.append(v);
+      mk('Ride this route ('+comma(sp[1]-sp[0])+' mi)',true,()=>startScenic(r.id,sp))}
     else mk('Ride this route',true,()=>startScenic(r.id));
     c.append(btns);box.append(c)});
 }
@@ -642,7 +644,7 @@ function preload(r,idx){
 function updatePhoto(r,prog){
   if(PH.route!==r.id){PH.route=r.id;PH.want=PH.shown=null;PH.idx=-1;$('ph0').classList.remove('on');$('ph1').classList.remove('on');$('phAttr').textContent=''}
   const idx=Math.max(0,Math.min(r.frames.length-1,Math.floor(prog/r.stepMi))),id=r.hold[idx];
-  $('phMile').textContent='Mile '+fmt1(prog)+' of '+fmt1(PH.end||r.D)+(r.frames[idx]||!PH.shown?'':' · no new photo here');
+  $('phMile').textContent='Mile '+fmt1(prog-(PH.from||0))+' of '+fmt1(PH.end||r.D)+(r.frames[idx]||!PH.shown?'':' · no new photo here');
   if(!mlyToken()){PH.want=null;$('phMsg').textContent=PH_MSG.notoken;return}
   if(PH.err&&Date.now()-PH.errAt>15000)PH.want=null;   // retry after an error
   if(!id){$('phMsg').textContent='No street photos on this route yet.';return}
@@ -678,7 +680,7 @@ function vidAttr(v,T){const a=$('phAttr');a.textContent='Video: '+v.channel+' ·
 function updateVideo(r,prog){
   showVideo(true);
   const v=vidAt(r,prog),T=vidTime(v,prog);vidAttr(v,T);
-  $('phMile').textContent='Mile '+fmt1(prog)+' of '+fmt1(PH.end||r.D);
+  $('phMile').textContent='Mile '+fmt1(prog-(PH.from||0))+' of '+fmt1(PH.end||r.D);
   if(!YV.player){
     if(!YV.loading){YV.loading=true;$('phMsg').textContent='Loading the video…';
       loadYT().then(Y=>{if(!Y){YV.err='load';renderTrip();return}
@@ -865,22 +867,23 @@ function setBig(){document.body.classList.toggle('bigmap',!!LM.big);$('scene').t
 function loadView(){try{return JSON.parse(localStorage.getItem(LM_KEY)||'null')}catch(e){return null}}
 let lmKey='';
 function renderScenic(J){
-  const {r,D,prog,arrived,from,len,endName}=J,st=S.settings,k=mapK,eps=0.001,frac=Math.max(0,(prog-from)/len);PH.end=D;
+  const {r,D,prog,arrived,from,len,endName,trip}=J,st=S.settings,k=mapK,eps=0.001,frac=Math.max(0,(prog-from)/len);PH.end=len;PH.from=from;
+  const marks=r.marks.filter(m=>m.mi>=from-0.05&&m.mi<=D+0.05);
   el('polyline',{points:r.fullPts,class:'rt'},gRoute);
   if(prog>0)el('polyline',{points:pathPts(r,prog),class:'rd'},gRoute);
-  const next=r.marks.find(m=>m.mi>prog+eps&&m.mi<=D+eps)||null,passed=r.marks.filter(m=>m.mi<=prog+eps),last=passed[passed.length-1]||null;
-  r.marks.forEach(m=>{const q=pathPos(r,m.mi);el('circle',{cx:q.x,cy:q.y,r:4*k,class:'wp'+(m.mi<=prog+eps?' done':'')},gTowns)});
-  [r.marks[0],next,r.marks[r.marks.length-1]].forEach((m,i,arr)=>{if(!m||arr.indexOf(m)!==i)return;const q=pathPos(r,m.mi);mapLabel(q.x,q.y,m.name,gTowns)});
+  const next=marks.find(m=>m.mi>prog+eps)||null,passed=marks.filter(m=>m.mi<=prog+eps),last=passed[passed.length-1]||null;
+  marks.forEach(m=>{const q=pathPos(r,m.mi);el('circle',{cx:q.x,cy:q.y,r:4*k,class:'wp'+(m.mi<=prog+eps?' done':'')},gTowns)});
+  [marks[0],next,marks[marks.length-1]].forEach((m,i,arr)=>{if(!m||arr.indexOf(m)!==i)return;const q=pathPos(r,m.mi);mapLabel(q.x,q.y,m.name,gTowns)});
   const p=pathPos(r,prog);
   meDot.style.display='';meDot.setAttribute('cx',p.x);meDot.setAttribute('cy',p.y);
   meLbl.setAttribute('x',p.x);meLbl.setAttribute('y',p.y-15*k);meLbl.textContent=famRows.length>1?'You':'';
   // highway-style signs
   setSignKeys('Just passed','Coming up','Finish');
-  setSigns(last?last.name:r.a.n,!last||last.mi<eps?'Starting point':'Mile '+fmt1(last.mi),
+  setSigns(last?last.name:J.startName,!last||last.mi<from+eps?'Starting point':'Mile '+fmt1(last.mi-from),
     next?next.name:'Finish line',next?fmt1(next.mi-prog)+' mi':'Arrived',
     endName,arrived?'You made it':fmt1(D-prog)+' mi to go');
   $('jTitle').textContent=J.label+' · '+comma(len)+' mi';
-  $('mmLeft').textContent='Mile '+fmt1(prog);$('mmPct').textContent=(frac*100).toFixed(1)+'% of the way';$('mmTot').textContent=comma(D)+' mi';
+  $('mmLeft').textContent='Mile '+fmt1(trip);$('mmPct').textContent=(frac*100).toFixed(1)+'% of the way';$('mmTot').textContent=comma(len)+' mi';
   $('tripBar').style.width=(frac*100)+'%';
   $('eta').textContent=arrived?'Pick another route to keep going.':'At '+st.target+' RPM, an hour a day gets you to the finish in about '+etaTxt(D-prog)+'.';
   $('arrived').hidden=!arrived;if(arrived)$('arrived').textContent='You finished '+J.label+'! That\'s '+comma(len)+' miles.';
@@ -891,12 +894,12 @@ function renderScenic(J){
   else if(last&&last.mi>eps&&prog-last.mi<0.3){ps.hidden=false;$('phSignK').textContent='Now passing';$('phSignT').textContent=last.name;$('phSignD').textContent=last.note||''}
   else ps.hidden=true;
   // landmark list, rebuilt only when what's passed changes
-  const key=r.id+'|'+passed.length;
+  const key=r.id+'|'+from+'|'+passed.length;
   if(key!==lmKey){lmKey=key;const ul=$('lmList');ul.textContent='';
-    r.marks.forEach(m=>{const li=document.createElement('li'),x=document.createElement('span'),y=document.createElement('span');
+    marks.forEach(m=>{const li=document.createElement('li'),x=document.createElement('span'),y=document.createElement('span');
       li.className=m.mi<=prog+eps?'passed':m===next?'next':'';
       x.textContent=m.name;if(m.note){const s=document.createElement('small');s.textContent=m.note;x.append(s)}
-      y.textContent='mi '+fmt1(m.mi);li.append(x,y);ul.append(li)})}
+      y.textContent='mi '+fmt1(Math.max(0,m.mi-from));li.append(x,y);ul.append(li)})}
   renderStreetMap(r,prog,eps);
   renderVToggle(r);
   if(useVideo(r,prog))updateVideo(r,prog);else{showVideo(false);updatePhoto(r,prog);photoNote(r,prog)}
@@ -1035,7 +1038,7 @@ $('modeTog').addEventListener('click',()=>setMode('together'));
 $('btnSwap').addEventListener('click',()=>{[plan.a,plan.b]=[plan.b,plan.a];$('pFrom').value=plan.a?plan.a.n:'';$('pTo').value=plan.b?plan.b.n:'';renderPlanner()});
 $('btnGo').addEventListener('click',startJourney);
 $('btnNew').addEventListener('click',()=>{const J=jInfo();
-  if(J&&!J.arrived){$('confirmTxt').textContent='You\'re '+comma(J.prog)+' of '+comma(J.D)+' miles into '+J.label+'. A new journey ends this one; your miles stay in the logbook.';$('confirmBox').hidden=false}
+  if(J&&!J.arrived){$('confirmTxt').textContent='You\'re '+comma(J.trip)+' of '+comma(J.len)+' miles into '+J.label+'. A new journey ends this one; your miles stay in the logbook.';$('confirmBox').hidden=false}
   else openPlanner()});
 $('cfYes').addEventListener('click',openPlanner);
 $('cfNo').addEventListener('click',()=>{$('confirmBox').hidden=true});
