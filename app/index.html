@@ -206,6 +206,8 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
 @media (max-width:860px){.live{grid-template-columns:1fr 1fr}.gauge{grid-column:1/-1}.stat:nth-of-type(2){border-left:0;padding-left:0}.mapgrid,.mapgrid.scenic,.lower{grid-template-columns:1fr}}
 @media (max-width:420px){.rpm{font-size:52px}.stat .v{font-size:24px}.totals .v{font-size:20px}.wpl{display:none}}
 @media (prefers-reduced-motion:reduce){.bar b,.photo img{transition:none}}
+.famcode{margin:10px 0 4px}.famcode label{display:block;font-weight:600;font-size:13px}.famcode label span{display:block;font-weight:400;color:var(--muted);font-size:12px;margin:2px 0 6px}
+.famrow{display:flex;gap:8px;flex-wrap:wrap}.famrow input{flex:1;min-width:180px;font:inherit;font-family:ui-monospace,Consolas,monospace;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
 </style>
 
 <div class="wrap">
@@ -307,6 +309,10 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
         <button id="modeTog" aria-pressed="false">Ride together</button>
       </div>
       <div class="note" id="famNote">Your stats stay private. Switch to Ride together to share your miles and see everyone on the map.</div>
+      <div class="famcode">
+        <label for="sFam">Family code<span>Everyone who rides together uses the same code. Make one here, then text it to the others. Saved in this browser only.</span></label>
+        <div class="famrow"><input type="text" id="sFam" autocomplete="off" spellcheck="false" placeholder="Paste the family code"><button class="btn" id="btnFamNew" type="button">Make a new code</button></div>
+      </div>
       <table id="famTable" hidden>
         <thead><tr><th>Rider</th><th>Today</th><th>Week</th><th>Total</th></tr></thead>
         <tbody id="famBody"></tbody>
@@ -947,7 +953,7 @@ async function pushRider(){
 }
 function subscribeRiders(){
   if(!db||riderUnsub)return;
-  riderUnsub=db.collection('riders').onSnapshot(snap=>{riders=snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}));renderFamily()},()=>{});
+  riderUnsub=db.collection('riders').onSnapshot(snap=>{riders=snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}));cloudErr='';renderFamily()},()=>{cloudErr="Couldn't read the family leaderboard. Check the family code.";renderFamily()});
 }
 async function setMode(m){
   S.settings.mode=m;dirty=true;
@@ -959,10 +965,11 @@ async function setMode(m){
 const OTHER_COLORS=['var(--other)','#c2410c','#7c3aed','#0e7490','#a16207'];
 async function renderFamily(){
   const tog=S.settings.mode==='together';
-  if(!db){$('famNote').textContent='Family sharing works when this page is opened from your Claude link. Here, your miles are saved in this browser only.';$('famTable').hidden=true;return}
+  $('sFam').value=famCode();
+  if(!db){$('famNote').textContent=cloudErr||(tog?'To see each other, add the same family code below on each computer.':'Your stats stay private. To ride together, add a family code below and switch to Ride together.');$('famTable').hidden=true;famRows=[];return}
   if(!tog){$('famNote').textContent='Your stats stay private. Switch to Ride together to share your miles and see everyone on the map.';$('famTable').hidden=true;return}
   const others=riders.filter(r=>r.id!==uid);
-  $('famNote').textContent=others.length?'Everyone who chose Ride together shows up here and on the map.':'Sharing on. When your son opens his copy of this link and picks Ride together, he\'ll appear here.';
+  $('famNote').textContent=others.length?'Everyone who chose Ride together shows up here and on the map.':'Sharing on. When someone else adds this family code and picks Ride together, they\'ll appear here.';
   const ids=riders.map(r=>r.id);let ps={};try{if(userCap&&ids.length)ps=await userCap.profiles(ids)}catch(e){}
   const wk=dayKey(weekStart()),dk=dayKey();
   const rows=riders.map(r=>({...r,isMe:r.id===uid,name:(r.id===uid?S.settings.nick.trim():r.nick)||(ps[r.id]&&ps[r.id].name)||'Rider',
@@ -993,27 +1000,40 @@ function renderOthers(){
 let saving=false;
 async function saveAll(){
   pruneDays();saveLocal();
-  if(db&&uid&&!saving){saving=true;try{await db.doc('data/users/'+uid+'/stats').set(JSON.parse(JSON.stringify(S)))}catch(e){}saving=false}
   pushRider();dirty=false;
 }
 setInterval(()=>{if(dirty)saveAll()},30000);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&dirty)saveAll()});
 setInterval(renderChart,60000);
 
+// Family sharing: Firebase Firestore (project desk-ride-quindacy). Each family's riders live at families/{code}/riders/{riderId}.
+// The code is a long random string kept in each rider's browser; the security rules (firebase/firestore.rules) only let
+// people who know a code read or write that family. The web config below is public by design.
+const FB_CONFIG={apiKey:'AIzaSyBqHwLRTtPmy0gs3FfWJ8yF7ygLUX567Mg',authDomain:'desk-ride-quindacy.firebaseapp.com',projectId:'desk-ride-quindacy',appId:'1:1070243568579:web:09c944e9fff1e9b33ebb76'};
+const FAM_KEY='desk-ride-family',RID_KEY='desk-ride-rider',FB_VER='10.14.1';
+let fsApi=null,cloudErr='';
+function lsGet(k){try{return localStorage.getItem(k)||''}catch(e){return ''}}
+function lsSet(k,v){try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}}
+function randCode(n){const a='abcdefghjkmnpqrstuvwxyz23456789',b=new Uint8Array(n);crypto.getRandomValues(b);return[...b].map(x=>a[x%a.length]).join('')}
+function famCode(){return lsGet(FAM_KEY).trim()}
+function riderId(){let r=lsGet(RID_KEY);if(!r){r=randCode(20);lsSet(RID_KEY,r)}return r}
+function loadScript(src){return new Promise((res,rej)=>{const t=document.createElement('script');t.src=src;t.onload=res;t.onerror=rej;document.head.append(t)})}
+async function firestore(){
+  if(!fsApi)fsApi=(async()=>{
+    await loadScript('https://www.gstatic.com/firebasejs/'+FB_VER+'/firebase-app-compat.js');
+    await loadScript('https://www.gstatic.com/firebasejs/'+FB_VER+'/firebase-firestore-compat.js');
+    return firebase.initializeApp(FB_CONFIG).firestore()})().catch(e=>{fsApi=null;throw e});
+  return fsApi}
 async function initCloud(){
-  if(!window.claude||!window.claude.use)return;
+  if(riderUnsub){riderUnsub();riderUnsub=null}riders=[];db=null;cloudErr='';
+  const code=famCode();uid=riderId();
+  if(code.length<16){renderFamily();renderOthers();return}
   try{
-    const [d,u]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);
-    userCap=u;if(!d||!u)return;uid=await u.id();if(!uid)return;db=d;
-    const snap=await db.doc('data/users/'+uid+'/stats').get();
-    if(snap.exists){const o=snap.data();
-      // keep whichever record has more miles (covers riding before the cloud answered)
-      if((o.totalMi||0)>=S.totalMi){S={settings:{...DEFAULTS,...o.settings},totalMi:o.totalMi||0,days:JSON.parse(JSON.stringify(o.days||{})),journey:o.journey?{...o.journey}:null,done:JSON.parse(JSON.stringify(o.done||[]))}}
-    }else{await saveAll()}
-    applySettingsToForm();
-    if(S.settings.mode==='together'){subscribeRiders();pushRider()}
-    renderAll();
-  }catch(e){}
+    const fs=await firestore(),base='families/'+code+'/';
+    db={doc:p=>fs.doc(base+p),collection:p=>fs.collection(base+p)};
+    if(S.settings.mode==='together'){lastRiderJson='';subscribeRiders();await pushRider()}
+  }catch(e){cloudErr="Couldn't reach the family leaderboard. Check your connection and reload."}
+  renderFamily();renderTrip();
 }
 
 /* ---------- settings form ---------- */
@@ -1034,6 +1054,11 @@ $('btnPause').addEventListener('click',()=>{live.paused=!live.paused;$('btnPause
 $('simOn').addEventListener('change',e=>setSim(e.target.checked));
 $('simRpm').addEventListener('input',e=>{live.simRpm=+e.target.value;$('simVal').textContent=live.simRpm+' RPM'});
 $('modeSep').addEventListener('click',()=>setMode('separate'));
+$('sFam').addEventListener('change',()=>{const v=$('sFam').value.trim();if(v&&v.length<16){$('famNote').textContent='That code looks too short. Family codes are 20 letters and numbers.';return}
+  lsSet(FAM_KEY,v);initCloud()});
+$('btnFamNew').addEventListener('click',()=>{if(famCode()&&!confirm('Replace your current family code? Anyone still using the old one will not see you anymore.'))return;
+  const c=randCode(20);lsSet(FAM_KEY,c);$('sFam').value=c;try{navigator.clipboard.writeText(c)}catch(e){}
+  if(S.settings.mode!=='together')setMode('together');initCloud();$('famNote').textContent='New code made and copied. Text it to the others; they paste it here.'});
 $('modeTog').addEventListener('click',()=>setMode('together'));
 $('btnSwap').addEventListener('click',()=>{[plan.a,plan.b]=[plan.b,plan.a];$('pFrom').value=plan.a?plan.a.n:'';$('pTo').value=plan.b?plan.b.n:'';renderPlanner()});
 $('btnGo').addEventListener('click',startJourney);

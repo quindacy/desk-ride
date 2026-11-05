@@ -1,0 +1,25 @@
+rules_version = '2';
+// Desk Ride family sharing.
+// Data lives at families/{familyCode}/riders/{riderId}. The family code is a long random string
+// that a family shares privately (it's never in this repo), so only people who have it can read or
+// write that family's riders. There is no way to list families.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /families/{fam}/riders/{rider} {
+      function okFam(f) { return f.size() >= 16 && f.size() <= 64; }
+      function okRider(r) { return r.size() >= 12 && r.size() <= 40; }
+      function str(v, n) { return v is string && v.size() <= n; }
+      function num(v) { return (v is int || v is float) && v >= 0 && v < 10000000; }
+      function valid(d) {
+        return d.keys().hasOnly(['nick','totalMi','weekMi','weekKey','todayMi','dayKey','jA','jB','jRoute','jProg','jFrom','updatedAt'])
+          && str(d.nick, 24) && num(d.totalMi) && num(d.weekMi) && num(d.todayMi)
+          && str(d.weekKey, 12) && str(d.dayKey, 12)
+          && str(d.jA, 80) && str(d.jB, 80) && str(d.jRoute, 40) && num(d.jProg)
+          && (!('jFrom' in d) || num(d.jFrom)) && d.updatedAt is int;
+      }
+      allow get, list: if okFam(fam);
+      allow create, update: if okFam(fam) && okRider(rider) && valid(request.resource.data);
+      allow delete: if okFam(fam) && okRider(rider);
+    }
+  }
+}

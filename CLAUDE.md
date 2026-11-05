@@ -11,7 +11,7 @@ A desk-bike companion app for Dan and his son. Each of them has a Magene S3+ cad
   - Virtual speed and distance: distance per pedal turn is a setting (default 20 ft).
   - A journey map: pick any two US cities (about 265 built in) on an Albers-projected SVG map. The route is a straight line with miles × 1.2 as a road estimate. It shows highway-style signs (near / next stop / destination), arrival detection, and a list of completed journeys.
   - A logbook: today, this week (weeks start Monday), all time, and a 14-day bar chart.
-  - Family mode: "Keep separate" or "Ride together", with a leaderboard and other riders' journeys on the map. This uses the Claude artifact `db`/`user` capabilities (`window.claude.use`), which do not exist outside claude.ai, so a hosted version needs its own backend. The app falls back to localStorage.
+  - Family mode: "Keep separate" or "Ride together", with a leaderboard and other riders' journeys on the map (backend: see Status).
 - `routes/routes.json`: three curated scenic routes with waypoints, coverage stats, and landmarks with mileposts:
   - Red Rock to the Rim (Sedona to Grand Canyon loop, 227 mi, 99% coverage)
   - Zion to Capitol Reef (214 mi, 95%)
@@ -38,10 +38,13 @@ The artifact viewer blocks outside images (so Mapillary photos can't show) and p
 - Bluetooth: the sensor sleeps when the pedals stop. Every connection step has a time limit (Windows can leave `gatt.connect()` hanging) and the app keeps retrying every few seconds, so it should reconnect by itself once pedaling resumes. Not yet confirmed on the real sensor.
 - Pause ride button (header; shows once you start pedaling or after a sensor has been connected, even while it sleeps): saves your spot, disconnects the sensor without the reconnect loop, stops alerts and the video, and shows a session summary with a Resume ride button.
 
+- Family sharing (2026-11-04): Firebase project `desk-ride-quindacy` (free Spark plan, Firestore in nam5, created with the Firebase CLI logged in as the family Google account). Riders are stored at `families/{familyCode}/riders/{riderId}`. The family code is a 20-character random string made with "Make a new code" in the Family ride panel and kept in each browser's localStorage (`desk-ride-family`); the rider id is random per browser (`desk-ride-rider`). Rules in `firebase/firestore.rules` (deploy with `firebase deploy --only firestore:rules` from `firebase/`) allow read/write only with a code of 16+ characters, validate every field, and block listing families. Never commit a family code. The Firebase web config in the app is public by design. Only the leaderboard row is shared; each rider's full logbook still lives in their own browser.
+- Scenic routes are just their video stretch: one "Ride this route" button per card, and miles, landmarks and signs count from where the video starts.
+
 ## Next steps
 
 1. Confirm Web Bluetooth works with the Magene sensor in Chrome or Edge, and check the player with a real Mapillary token.
-2. Replace the Claude artifact family sharing with a small backend, such as a Firebase or Supabase free tier.
+2. Confirm family sharing between Dad's and Derek's computers.
 3. Optional: real road routing for the pick-two-cities mode (OSRM) instead of straight lines.
 
 ## Preferences
