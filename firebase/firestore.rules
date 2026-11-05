@@ -1,6 +1,6 @@
 rules_version = '2';
 // Desk Ride family sharing.
-// Data lives at families/{familyCode}/riders/{riderId}. The family code is a long random string
+// Data lives at families/{familyCode}/riders/{riderId}, plus one shared challenge at families/{familyCode}/challenge/current. The family code is a long random string
 // that a family shares privately (it's never in this repo), so only people who have it can read or
 // write that family's riders. There is no way to list families.
 service cloud.firestore {
@@ -11,15 +11,31 @@ service cloud.firestore {
       function str(v, n) { return v is string && v.size() <= n; }
       function num(v) { return (v is int || v is float) && v >= 0 && v < 10000000; }
       function valid(d) {
-        return d.keys().hasOnly(['nick','totalMi','weekMi','weekKey','todayMi','dayKey','jA','jB','jRoute','jProg','jFrom','updatedAt'])
+        return d.keys().hasOnly(['nick','totalMi','weekMi','weekKey','todayMi','dayKey','jA','jB','jRoute','jProg','jFrom','cId','cMi','cDone','updatedAt'])
           && str(d.nick, 24) && num(d.totalMi) && num(d.weekMi) && num(d.todayMi)
           && str(d.weekKey, 12) && str(d.dayKey, 12)
           && str(d.jA, 80) && str(d.jB, 80) && str(d.jRoute, 40) && num(d.jProg)
-          && (!('jFrom' in d) || num(d.jFrom)) && d.updatedAt is int;
+          && (!('jFrom' in d) || num(d.jFrom)) && d.updatedAt is int
+          && (!('cId' in d) || str(d.cId, 24)) && (!('cMi' in d) || num(d.cMi))
+          && (!('cDone' in d) || (d.cDone is int && d.cDone >= 0));
       }
       allow get, list: if okFam(fam);
       allow create, update: if okFam(fam) && okRider(rider) && valid(request.resource.data);
       allow delete: if okFam(fam) && okRider(rider);
+    }
+    // The family's current challenge: a race along a scenic route, or most miles between two days.
+    match /families/{fam}/challenge/{doc} {
+      function day(v) { return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'); }
+      function validC(d) {
+        return d.keys().hasOnly(['id','kind','route','start','end','by','createdAt'])
+          && d.id is string && d.id.size() >= 8 && d.id.size() <= 24
+          && d.kind in ['race','miles'] && d.route is string && d.route.size() <= 40
+          && day(d.start) && (d.end == '' || day(d.end))
+          && d.by is string && d.by.size() <= 24 && d.createdAt is int;
+      }
+      allow get: if fam.size() >= 16 && fam.size() <= 64 && doc == 'current';
+      allow create, update: if fam.size() >= 16 && fam.size() <= 64 && doc == 'current' && validC(request.resource.data);
+      allow delete: if fam.size() >= 16 && fam.size() <= 64 && doc == 'current';
     }
   }
 }

@@ -206,6 +206,10 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
 @media (max-width:860px){.live{grid-template-columns:1fr 1fr}.gauge{grid-column:1/-1}.stat:nth-of-type(2),.stat:nth-of-type(4){border-left:0;padding-left:0}.mapgrid,.mapgrid.scenic,.lower{grid-template-columns:1fr}}
 @media (max-width:420px){.rpm{font-size:52px}.stat .v{font-size:24px}.totals .v{font-size:20px}.wpl{display:none}}
 @media (prefers-reduced-motion:reduce){.bar b,.photo img{transition:none}}
+.chal{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}.chal h3{margin:0 0 4px;font-size:17px;font-weight:800}
+.chal label{display:block;font-weight:600;font-size:13px;margin:8px 0}.chal label input,.chal label select{display:block;margin-top:4px;font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);max-width:100%}
+.chal table{margin:8px 0}.chal .famrow{margin-top:10px}.chal .win td{font-weight:800}
+.lm-oth{font-weight:800;font-family:var(--display)}
 .famcode{margin:10px 0 4px}.famcode label{display:block;font-weight:600;font-size:13px}.famcode label span{display:block;font-weight:400;color:var(--muted);font-size:12px;margin:2px 0 6px}
 .famrow{display:flex;gap:8px;flex-wrap:wrap}.famrow input{flex:1;min-width:180px;font:inherit;font-family:ui-monospace,Consolas,monospace;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
 </style>
@@ -318,6 +322,21 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
         <thead><tr><th>Rider</th><th>Today</th><th>Week</th><th>Total</th></tr></thead>
         <tbody id="famBody"></tbody>
       </table>
+      <div class="chal" id="chalBox" hidden>
+        <h3 id="chalTitle"></h3>
+        <div class="note" id="chalNote"></div>
+        <table id="chalTable" hidden><thead><tr><th>Rider</th><th>Miles</th><th></th></tr></thead><tbody id="chalBody"></tbody></table>
+        <div class="famrow" id="chalBtns"></div>
+      </div>
+      <div class="chal" id="chalForm" hidden>
+        <h3>New family challenge</h3>
+        <div class="seg" role="group" aria-label="Kind of challenge"><button type="button" id="chKRace" aria-pressed="true">Race a route</button><button type="button" id="chKMiles" aria-pressed="false">Most miles</button></div>
+        <label id="chRouteL" for="chRoute">Route<select id="chRoute"></select></label>
+        <label for="chStart">Start day<input type="date" id="chStart"></label>
+        <label id="chEndL" for="chEnd" hidden>Last day<input type="date" id="chEnd"></label>
+        <div class="note" id="chHelp"></div>
+        <div class="famrow"><button class="btn primary" id="chGo" type="button">Start challenge</button><button class="btn" id="chCancel" type="button">Cancel</button></div>
+      </div>
     </section>
   </div>
 
@@ -357,7 +376,7 @@ function weekStart(d=new Date()){const x=new Date(d);x.setHours(0,0,0,0);x.setDa
 function weekMi(){const ws=weekStart();let t=0;for(const[k,v] of Object.entries(S.days)){const [y,m,dd]=k.split('-').map(Number);if(new Date(y,m-1,dd)>=ws)t+=v.mi}return t}
 function today(){return S.days[dayKey()]||(S.days[dayKey()]={mi:0,min:0})}
 
-function loadLocal(){try{const r=localStorage.getItem('pedal-v1');if(r){const o=JSON.parse(r);S={settings:{...DEFAULTS,...o.settings},totalMi:o.totalMi||0,days:o.days||{},journey:o.journey||null,done:o.done||[]}}}catch(e){}}
+function loadLocal(){try{const r=localStorage.getItem('pedal-v1');if(r){const o=JSON.parse(r);S={settings:{...DEFAULTS,...o.settings},totalMi:o.totalMi||0,days:o.days||{},journey:o.journey||null,done:o.done||[],chal:o.chal||null}}}catch(e){}}
 function saveLocal(){try{localStorage.setItem('pedal-v1',JSON.stringify(S))}catch(e){}}
 function pruneDays(){const keys=Object.keys(S.days).sort();while(keys.length>120)delete S.days[keys.shift()]}
 
@@ -485,6 +504,7 @@ function tick(){
   else if(live.stoppedSince===null)live.stoppedSince=now;
   if(moving&&live.rpm<st.target){if(live.belowSince===null)live.belowSince=now}else if(moving)live.belowSince=null;
 
+  syncChal();
   // status + alerts
   if(live.ended){$('status').textContent='Ride paused';$('status').className='status';document.title='Desk Ride Journeys';checkArrival();renderLive();return}
   let status='Waiting',cls='';
@@ -512,7 +532,7 @@ function renderLive(){
   $('btnEnd').hidden=!!live.ended||!(live.pedaledOnce||live.sim||btDev);
   $('spd').textContent=fmt1(mph);$('sesMi').textContent=fmt2(live.sesMi);$('sesCal').textContent=Math.round(live.sesCal);
   const s=Math.floor(live.sesSec);$('sesTime').textContent=Math.floor(s/3600)?Math.floor(s/3600)+':'+String(Math.floor(s/60)%60).padStart(2,'0')+':'+String(s%60).padStart(2,'0'):Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
-  $('tToday').textContent=fmt1(today().mi);$('tWeek').textContent=fmt1(weekMi());$('tAll').textContent=S.totalMi<100?fmt1(S.totalMi):comma(S.totalMi);
+  renderChal();$('tToday').textContent=fmt1(today().mi);$('tWeek').textContent=fmt1(weekMi());$('tAll').textContent=S.totalMi<100?fmt1(S.totalMi):comma(S.totalMi);
   renderTrip();
 }
 
@@ -858,10 +878,21 @@ function renderStreetMap(r,prog,eps){
   }
   fitStreetMap();
   const pos=llAt(r,prog);
-  LM.done.setLatLngs(llDone(r,prog));LM.me.setLatLng(pos);
+  LM.done.setLatLngs(llDone(r,prog));LM.me.setLatLng(pos);lmOthers(r);
   const key=r.marks.filter(m=>m.mi<=prog+eps).length;
   if(key!==LM.key){LM.key=key;r.marks.forEach((m,i)=>LM.marks[i].setStyle(m.mi<=prog+eps?{color:sign,fillColor:sign}:{color:GREY,fillColor:'#fff'}))}
   if(LM.follow){const s=LM.map.getSize();if(s.x&&LM.map.latLngToContainerPoint(pos).distanceTo(s.divideBy(2))>3)LM.map.panTo(pos,{animate:true,duration:.8})}
+}
+// other riders on the same scenic route (Ride together), as colored dots with their names
+function cssColor(c){return c.startsWith('var(')?getComputedStyle(document.documentElement).getPropertyValue(c.slice(4,-1)).trim()||'#b45309':c}
+function lmOthers(r){
+  if(!LM.g)return;if(!LM.oth||LM.othG!==LM.g){LM.oth=new Map();LM.othG=LM.g}
+  const keep=new Set();
+  if(S.settings.mode==='together')famRows.filter(x=>!x.isMe&&x.jRoute===r.id).forEach(x=>{keep.add(x.id);
+    const p=llAt(r,Math.min(r.D,x.jProg||0)),col=cssColor(x.color);let m=LM.oth.get(x.id);
+    if(!m){m=L.circleMarker(p,{radius:8,weight:3,color:'#fff',fillColor:col,fillOpacity:1}).bindTooltip(x.name,{permanent:true,direction:'top',offset:[0,-8],className:'lm-oth'}).addTo(LM.g);LM.oth.set(x.id,m)}
+    else{m.setLatLng(p);m.setStyle({fillColor:col});m.setTooltipContent(x.name)}});
+  for(const[id,m] of LM.oth)if(!keep.has(id)){m.remove();LM.oth.delete(id)}
 }
 // in the ride view, size the map so the side column ends level with the photo
 function fitStreetMap(){
@@ -949,8 +980,8 @@ function renderChart(){
 
 /* ---------- family (shared db) ---------- */
 function myRiderDoc(){
-  const J=jInfo();
-  return {nick:S.settings.nick.trim(),totalMi:Math.round(S.totalMi*10)/10,weekMi:Math.round(weekMi()*10)/10,weekKey:dayKey(weekStart()),todayMi:Math.round(today().mi*10)/10,dayKey:dayKey(),jA:J?J.a.n:'',jB:J?J.b.n:'',jRoute:J&&J.scenic?J.r.id:'',jProg:J?Math.round(J.prog*10)/10:0,updatedAt:Date.now()};
+  const J=jInfo(),mc=myChal();
+  return {nick:S.settings.nick.trim(),totalMi:Math.round(S.totalMi*10)/10,weekMi:Math.round(weekMi()*10)/10,weekKey:dayKey(weekStart()),todayMi:Math.round(today().mi*10)/10,dayKey:dayKey(),jA:J?J.a.n:'',jB:J?J.b.n:'',jRoute:J&&J.scenic?J.r.id:'',jProg:J?Math.round(J.prog*10)/10:0,cId:mc?chal.id:'',cMi:mc?Math.round(chalMi(chal)*10)/10:0,cDone:mc?mc.done||0:0,updatedAt:Date.now()};
 }
 let riderUnsub=null,lastRiderJson='';
 async function pushRider(){
@@ -960,21 +991,22 @@ async function pushRider(){
 }
 function subscribeRiders(){
   if(!db||riderUnsub)return;
+  chalUnsub=db.doc('challenge/current').onSnapshot(d=>{chal=d.exists?d.data():null;syncChal();renderChal(true)},()=>{});
   riderUnsub=db.collection('riders').onSnapshot(snap=>{riders=snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}));cloudErr='';renderFamily()},()=>{cloudErr="Couldn't read the family leaderboard. Check the family code.";renderFamily()});
 }
 async function setMode(m){
   S.settings.mode=m;dirty=true;
   $('modeSep').setAttribute('aria-pressed',m==='separate');$('modeTog').setAttribute('aria-pressed',m==='together');
   if(m==='together'){lastRiderJson='';await pushRider();subscribeRiders()}
-  else{if(riderUnsub){riderUnsub();riderUnsub=null}riders=[];if(db&&uid){try{await db.doc('riders/'+uid).delete()}catch(e){}}}
+  else{if(riderUnsub){riderUnsub();riderUnsub=null}if(chalUnsub){chalUnsub();chalUnsub=null}chal=null;riders=[];if(db&&uid){try{await db.doc('riders/'+uid).delete()}catch(e){}}}
   renderFamily();renderTrip();saveAll();
 }
 const OTHER_COLORS=['var(--other)','#c2410c','#7c3aed','#0e7490','#a16207'];
 async function renderFamily(){
   const tog=S.settings.mode==='together';
   $('sFam').value=famCode();
-  if(!db){$('famNote').textContent=cloudErr||(tog?'To see each other, add the same family code below on each computer.':'Your stats stay private. To ride together, add a family code below and switch to Ride together.');$('famTable').hidden=true;famRows=[];return}
-  if(!tog){$('famNote').textContent='Your stats stay private. Switch to Ride together to share your miles and see everyone on the map.';$('famTable').hidden=true;return}
+  if(!db){$('famNote').textContent=cloudErr||(tog?'To see each other, add the same family code below on each computer.':'Your stats stay private. To ride together, add a family code below and switch to Ride together.');$('famTable').hidden=true;famRows=[];renderChal(true);return}
+  if(!tog){$('famNote').textContent='Your stats stay private. Switch to Ride together to share your miles and see everyone on the map.';$('famTable').hidden=true;renderChal(true);return}
   const others=riders.filter(r=>r.id!==uid);
   $('famNote').textContent=others.length?'Everyone who chose Ride together shows up here and on the map.':'Sharing on. When someone else adds this family code and picks Ride together, they\'ll appear here.';
   const ids=riders.map(r=>r.id);let ps={};try{if(userCap&&ids.length)ps=await userCap.profiles(ids)}catch(e){}
@@ -988,7 +1020,7 @@ async function renderFamily(){
     const td0=document.createElement('td');const dot=document.createElement('span');dot.className='dot';dot.style.background=r.color;td0.append(dot,document.createTextNode(r.name));tr.append(td0);
     [fmt1(r.day),fmt1(r.week),comma(r.total)].forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.append(td)});body.append(tr)});
   $('famTable').hidden=!rows.length;
-  famRows=rows;renderOthers();
+  famRows=rows;renderOthers();renderChal(true);
 }
 let famRows=[];
 function renderOthers(){
@@ -1001,6 +1033,101 @@ function renderOthers(){
     const c=el('circle',{cx:p.x,cy:p.y,r:8*k,class:'oth'},othersG);c.style.fill=r.color;
     const t=el('text',{x:p.x,y:p.y+24*k,class:'ridl','text-anchor':'middle'},othersG);t.style.fill=r.color;t.textContent=r.name+' → '+(R?R.name:b.n.split(',')[0]);
     if(k!==1){t.style.fontSize=(12*k)+'px';t.style.strokeWidth=(4*k)+'px'}});
+  if(LM.rid&&SC.byId.get(LM.rid))lmOthers(SC.byId.get(LM.rid));
+}
+
+/* ---------- family challenge ---------- */
+// One challenge per family, at families/{code}/challenge/current. Everyone's miles count from midnight on the start
+// day by their own computer's clock, so nobody has to start at the same moment, and joining late loses nothing.
+// race: first to ride a scenic route's video stretch wins (your journey becomes that route on the start day).
+// miles: most miles from the start day through the last day wins.
+let chal=null,chalUnsub=null,chalKey='',chalKind='race';
+function myChal(){return S.chal&&chal&&S.chal.id===chal.id?S.chal:null}
+function chalPhase(c){const d=dayKey();return d<c.start?'soon':c.kind==='miles'&&c.end&&d>c.end?'over':'on'}
+function raceRoute(c){const r=c&&SC.byId.get(c.route);if(!r)return null;const sp=vidSpan(r)||[0,r.D];return{r,sp,len:sp[1]-sp[0]}}
+function chalRaw(c){let t=0;for(const[k,v] of Object.entries(S.days))if(k>=c.start&&(c.kind!=='miles'||!c.end||k<=c.end))t+=v.mi;return t}
+function chalMi(c){const t=chalRaw(c);if(c.kind!=='race')return t;const R=raceRoute(c);return R?Math.min(t,R.len):t}
+function keyDate(k){const[y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d)}
+function dateLabel(k){return keyDate(k).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})}
+function dayNum(k){return Math.round((keyDate(dayKey())-keyDate(k))/864e5)+1}
+function ordinal(n){const v=n%100;return n+(v>=11&&v<=13?'th':['th','st','nd','rd'][n%10]||'th')}
+// put this rider on the race route, at the miles they've ridden since the start day; remember their own journey
+function putOnRace(){
+  const c=chal,R=raceRoute(c);if(!R||!S.chal)return;
+  if(S.journey&&S.journey.race!==c.id){S.chal.prev=S.journey;S.chal.prevAt=S.totalMi}
+  S.journey={route:c.route,start:S.totalMi-chalRaw(c),started:c.start,from:R.sp[0],to:R.sp[1],race:c.id};
+  try{localStorage.setItem(VID_KEY,'video')}catch(e){}
+  plan.open=false;$('confirmBox').hidden=true;dirty=true;renderAll();saveAll();
+}
+function backToOwn(){
+  const m=S.chal;if(!m||!m.prev)return;
+  S.journey={...m.prev,start:m.prev.start+(S.totalMi-(m.prevAt||S.totalMi))};   // miles ridden in the race don't move your own journey
+  m.prev=null;dirty=true;renderAll();saveAll();
+}
+function syncChal(){
+  const m=myChal();if(!m||chal.kind!=='race'||!SC.ready)return;
+  if(chalPhase(chal)==='on'&&!m.placed){m.placed=true;putOnRace()}
+  if(!m.done&&m.placed){const R=raceRoute(chal);if(R&&chalRaw(chal)>=R.len-0.001){m.done=Date.now();dirty=true;saveAll()}}
+}
+function joinChal(){if(!chal)return;S.chal={id:chal.id,placed:false,done:0,prev:S.chal&&S.chal.prev||null,prevAt:S.chal&&S.chal.prevAt||0};dirty=true;syncChal();renderChal(true);saveAll()}
+function chalBtn(txt,fn,primary){const b=document.createElement('button');b.type='button';b.className='btn'+(primary?' primary':'');b.textContent=txt;b.onclick=fn;$('chalBtns').append(b)}
+function renderChal(force){
+  const box=$('chalBox');
+  if(!db||S.settings.mode!=='together'||!$('chalForm').hidden){box.hidden=true;chalKey='';return}
+  const c=chal,m=myChal(),R=c&&c.kind==='race'?raceRoute(c):null;
+  let rows=[];
+  if(c){rows=famRows.filter(r=>!r.isMe&&r.cId===c.id).map(r=>({name:r.name,color:r.color,mi:r.cMi||0,done:r.cDone||0,me:false}));
+    if(m){const me=famRows.find(r=>r.isMe);rows.push({name:me?me.name:(S.settings.nick.trim()||'You'),color:'var(--sign)',mi:chalMi(c),done:m.done||0,me:true})}
+    rows.sort((a,b)=>(a.done&&b.done)?a.done-b.done:a.done?-1:b.done?1:b.mi-a.mi)}
+  const ph=c?chalPhase(c):'',back=!!(S.chal&&S.chal.prev&&S.journey&&S.journey.race&&(!c||S.journey.race!==c.id||(m&&m.done))),
+    away=!!(c&&R&&m&&m.placed&&!m.done&&ph==='on'&&(!S.journey||S.journey.race!==c.id));
+  const key=JSON.stringify([c,ph,rows.map(r=>[r.name,r.color,fmt1(r.mi),r.done]),!!m,back,away,dayKey()]);
+  if(!force&&key===chalKey)return;chalKey=key;box.hidden=false;$('chalBtns').textContent='';
+  const body=$('chalBody');body.textContent='';
+  if(!c){$('chalTitle').textContent='Family challenge';
+    $('chalNote').textContent='Race each other along a scenic route, or see who rides the most miles. Pick a start day; everyone\'s miles count from midnight that day, so you don\'t have to start at the same time.';
+    $('chalTable').hidden=true;chalBtn('Start a challenge',openChalForm,true);if(back)chalBtn('Back to your own journey',backToOwn);return}
+  const by=c.by?c.by+' started this. ':'',winner=c.kind==='race'?rows.find(r=>r.done):(ph==='over'?rows[0]:null);
+  if(c.kind==='race'){$('chalTitle').textContent='Race: '+(R?R.r.name+' ('+comma(R.len)+' mi)':'route not found');
+    $('chalNote').textContent=ph==='soon'?by+'Starts '+dateLabel(c.start)+'. Miles count from midnight that day, and the app puts you on the route then.'
+      :(winner?(winner.me?'You won! ':winner.name+' won! '+(m&&m.done?'You finished too. ':m?'Keep riding to finish the route. ':'')):'Day '+dayNum(c.start)+'. First to the end wins. ')+'Miles count from '+dateLabel(c.start)+'.'}
+  else{$('chalTitle').textContent='Most miles: '+dateLabel(c.start).replace(/^\w+, /,'')+' to '+dateLabel(c.end).replace(/^\w+, /,'');
+    $('chalNote').textContent=ph==='soon'?by+'Starts '+dateLabel(c.start)+' and runs through '+dateLabel(c.end)+'.'
+      :ph==='over'?(winner?(winner.me?'You won':winner.name+' won')+' with '+fmt1(winner.mi)+' miles!':'It\'s over.')
+      :'Day '+dayNum(c.start)+' of '+(dayNum(c.start)-dayNum(c.end)+1)+'. Most miles by the end of '+dateLabel(c.end)+' wins.'}
+  let place=0;
+  rows.forEach(r=>{const tr=document.createElement('tr');if(r.me)tr.className='me';if(winner===r)tr.classList.add('win');
+    const td0=document.createElement('td'),dot=document.createElement('span');dot.className='dot';dot.style.background=r.color;td0.append(dot,document.createTextNode(r.name));
+    const td1=document.createElement('td');td1.textContent=fmt1(r.mi);
+    const td2=document.createElement('td');
+    td2.textContent=c.kind==='race'?(r.done?ordinal(++place)+' · finished':R?fmt1(Math.max(0,R.len-r.mi))+' mi to go':''):(winner===r?'Winner':'');
+    tr.append(td0,td1,td2);body.append(tr)});
+  $('chalTable').hidden=!rows.length;
+  if(!m&&ph!=='over')chalBtn('Join the '+(c.kind==='race'?'race':'challenge'),joinChal,true);
+  if(away)chalBtn('Back to the race',putOnRace,true);
+  if(back)chalBtn('Back to your own journey',backToOwn);
+  chalBtn('New challenge',openChalForm);
+  chalBtn('End challenge',async()=>{if(!confirm('End this challenge for everyone in the family?'))return;try{await db.doc('challenge/current').delete()}catch(e){$('chalNote').textContent="Couldn't end the challenge. Check your connection."}});
+}
+function openChalForm(){
+  const sel=$('chRoute');sel.textContent='';
+  SC.routes.forEach(r=>{const sp=vidSpan(r),o=document.createElement('option');o.value=r.id;o.textContent=r.name+' ('+comma(sp?sp[1]-sp[0]:r.D)+' mi)';sel.append(o)});
+  const t=new Date();$('chStart').value=dayKey(t);$('chStart').min=dayKey(t);t.setDate(t.getDate()+6);$('chEnd').value=dayKey(t);
+  setChalKind(chalKind);$('chalForm').hidden=false;$('chalBox').hidden=true;
+}
+function setChalKind(k){chalKind=k;$('chKRace').setAttribute('aria-pressed',k==='race');$('chKMiles').setAttribute('aria-pressed',k==='miles');
+  $('chRouteL').hidden=k!=='race';$('chEndL').hidden=k!=='miles';
+  $('chHelp').textContent=k==='race'?'Everyone who joins rides the route\'s video stretch. On the start day the app switches each rider to this route (your own journey is saved for later). First to the end wins.'
+    :'Whoever rides the most miles from the start day through the last day wins.'}
+async function createChal(){
+  const start=$('chStart').value,end=$('chEnd').value,route=$('chRoute').value;
+  if(!/^\d{4}-\d\d-\d\d$/.test(start)){$('chHelp').textContent='Pick a start day.';return}
+  if(chalKind==='miles'&&!(end>=start)){$('chHelp').textContent='The last day has to be on or after the start day.';return}
+  if(chalKind==='race'&&!route){$('chHelp').textContent='Pick a route.';return}
+  if(chal&&!confirm('This replaces the current challenge for everyone. Go ahead?'))return;
+  const c={id:randCode(12),kind:chalKind,route:chalKind==='race'?route:'',start,end:chalKind==='miles'?end:'',by:S.settings.nick.trim().slice(0,24),createdAt:Date.now()};
+  try{await db.doc('challenge/current').set(c);chal=c;$('chalForm').hidden=true;joinChal()}
+  catch(e){$('chHelp').textContent="Couldn't save the challenge. Check your connection and family code."}
 }
 
 /* ---------- persistence ---------- */
@@ -1032,7 +1159,7 @@ async function firestore(){
     return firebase.initializeApp(FB_CONFIG).firestore()})().catch(e=>{fsApi=null;throw e});
   return fsApi}
 async function initCloud(){
-  if(riderUnsub){riderUnsub();riderUnsub=null}riders=[];db=null;cloudErr='';
+  if(riderUnsub){riderUnsub();riderUnsub=null}if(chalUnsub){chalUnsub();chalUnsub=null}chal=null;riders=[];db=null;cloudErr='';
   const code=famCode();uid=riderId();
   if(code.length<16){renderFamily();renderOthers();return}
   try{
@@ -1063,6 +1190,8 @@ $('simRpm').addEventListener('input',e=>{live.simRpm=+e.target.value;$('simVal')
 $('modeSep').addEventListener('click',()=>setMode('separate'));
 $('sFam').addEventListener('change',()=>{const v=$('sFam').value.trim();if(v&&v.length<16){$('famNote').textContent='That code looks too short. Family codes are 20 letters and numbers.';return}
   lsSet(FAM_KEY,v);initCloud()});
+$('chKRace').addEventListener('click',()=>setChalKind('race'));$('chKMiles').addEventListener('click',()=>setChalKind('miles'));
+$('chGo').addEventListener('click',createChal);$('chCancel').addEventListener('click',()=>{$('chalForm').hidden=true;renderChal(true)});
 $('btnFamNew').addEventListener('click',()=>{if(famCode()&&!confirm('Replace your current family code? Anyone still using the old one will not see you anymore.'))return;
   const c=randCode(20);lsSet(FAM_KEY,c);$('sFam').value=c;try{navigator.clipboard.writeText(c)}catch(e){}
   if(S.settings.mode!=='together')setMode('together');initCloud();$('famNote').textContent='New code made and copied. Text it to the others; they paste it here.'});
