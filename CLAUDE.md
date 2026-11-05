@@ -12,7 +12,7 @@ A desk-bike companion app for Dan and his son. Each of them has a Magene S3+ cad
   - A journey map: pick any two US cities (about 265 built in) on an Albers-projected SVG map. The route is a straight line with miles × 1.2 as a road estimate. It shows highway-style signs (near / next stop / destination), arrival detection, and a list of completed journeys.
   - A logbook: today, this week (weeks start Monday), all time, and a 14-day bar chart.
   - Family mode: "Keep separate" or "Ride together", with a leaderboard and other riders' journeys on the map (backend: see Status).
-- `routes/routes.json`: three curated scenic routes with waypoints, coverage stats, and landmarks with mileposts:
+- `routes/routes.json`: curated scenic routes (seven as of 2026-11-04; the first three are below) with waypoints, coverage stats, and landmarks with mileposts:
   - Red Rock to the Rim (Sedona to Grand Canyon loop, 227 mi, 99% coverage)
   - Zion to Capitol Reef (214 mi, 95%)
   - Big Sur Coast (Monterey to Cambria, 105 mi, 87%)
@@ -33,6 +33,10 @@ The artifact viewer blocks outside images (so Mapillary photos can't show) and p
   - Big Sur: Adventure Theater (ubexuErXeyI), route miles 7.5 to 90.6.
   - Zion to Capitol Reef: AdventureEveryDay Zion to Bryce (th4ykU59Np8), then World of Drives Scenic Byway 12 (-6Ycfg41XjE), miles 7.7 to 213.6. The Bryce Lodge side trip (82.4 to 92.5) shows photos.
   - Red Rock to the Rim (now via US 180, 220 mi): AdventureEveryDay Oak Creek Canyon (XhKSbMF6Qm8), then Asphalt Cruiser POV Flagstaff to the South Rim and Desert View (psViPelEbLo) and Desert View to Flagstaff (axc_Mq4H3Qg). Downtown Flagstaff (26 to 32), the Village loop (107.5 to 111) and the Cameron trip (165.8 to 168.9) show photos.
+  - Florida Keys (82 mi): World of Drives Overseas Highway (kMiIE0sZb90), Islamorada to the Southernmost Point.
+  - Acadia Park Loop (23 mi): World of Drives (W94fTllBU7g), Hulls Cove to the Cadillac Mountain summit.
+  - Smoky Mountains (39 mi): By Any Route (xIx53MWI16g), park entrance up Newfound Gap Road and back to Gatlinburg (split at the stop at the gap).
+  - Going-to-the-Sun Road (50 mi): AdventureEveryDay (nte4LCVh7-E). The video is two drives in the wrong order, so it is listed twice: 1:01:10 onward covers West Glacier to The Loop, the start covers The Loop to St. Mary.
 - `build-frames.mjs` grades photos by camera pitch/roll (from `computed_rotation`) and `quality_score`: good ones win, so-so ones (pitch up to 32°, quality ≥ 0.25) fill in only when nothing better is near, bad ones are never used.
 
 - Bluetooth: the sensor sleeps when the pedals stop. Every connection step has a time limit (Windows can leave `gatt.connect()` hanging) and the app keeps retrying every few seconds, so it should reconnect by itself once pedaling resumes. Not yet confirmed on the real sensor.

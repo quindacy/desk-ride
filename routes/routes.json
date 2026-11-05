@@ -166,6 +166,157 @@
         { "mi": 213.5, "name": "The Castle" },
         { "mi": 213.9, "name": "Fruita", "note": "Capitol Reef finish" }
       ]
+    },
+    {
+      "id": "florida-keys",
+      "name": "Florida Keys",
+      "summary": "The Overseas Highway from Islamorada across Long Key Bridge and the Seven Mile Bridge, through Big Pine Key to Key West and the Southernmost Point.",
+      "miles": 82.3,
+      "videos": [
+        {
+          "youtube": "kMiIE0sZb90", "title": "Florida\u2019s Most Scenic Drive: Overseas Highway - Key Largo to Key West in 4K", "channel": "World of Drives", "fromName": "Islamorada", "toName": "Southernmost Point",
+          "note": "Southbound on US 1. Placed from the chapter list using bridge and island outlines from OpenStreetMap; the drive starts at 1:00 after the intro.",
+          "sync": [[2.6, 60], [4.0, 164], [16.86, 1026], [35.66, 2440], [42.42, 2903], [49.27, 3414], [54.92, 3877], [58.92, 4190], [63.63, 4629], [70.68, 5146], [75.88, 5527], [82.3, 6460]]
+        }
+      ],
+      "waypoints": [
+        { "name": "Islamorada, FL", "lat": 24.9237, "lon": -80.6291 },
+        { "name": "Marathon, FL", "lat": 24.7138, "lon": -81.0904 },
+        { "name": "Big Pine Key, FL", "lat": 24.6699, "lon": -81.3540 },
+        { "name": "Key West, FL (N Roosevelt Blvd)", "lat": 24.5594, "lon": -81.7850 },
+        { "name": "Southernmost Point, Key West, FL", "lat": 24.5465, "lon": -81.7975 }
+      ],
+      "coverage": { "percent": 99.6, "longestGapMi": 0.3, "medianPhotoYear": 2026 },
+      "landmarks": [
+        { "mi": 2.6, "name": "Islamorada", "note": "Sport fishing capital of the world" },
+        { "mi": 4.0, "name": "Indian Key Channel" },
+        { "mi": 7.0, "name": "Lower Matecumbe Key" },
+        { "mi": 15.0, "name": "Long Key State Park" },
+        { "mi": 16.9, "name": "Long Key Bridge", "note": "2.3 miles over open water" },
+        { "mi": 23.0, "name": "Marathon" },
+        { "mi": 35.7, "name": "Seven Mile Bridge", "note": "The longest bridge in the Keys" },
+        { "mi": 37.9, "name": "Pigeon Key", "note": "Old railroad camp beside the bridge" },
+        { "mi": 44.9, "name": "Bahia Honda State Park" },
+        { "mi": 49.3, "name": "Big Pine Key", "note": "Home of the tiny Key deer" },
+        { "mi": 54.9, "name": "Ramrod Key" },
+        { "mi": 58.9, "name": "Cudjoe Key" },
+        { "mi": 75.9, "name": "Boca Chica Channel" },
+        { "mi": 77.0, "name": "Stock Island" },
+        { "mi": 78.6, "name": "Key West" },
+        { "mi": 81.6, "name": "Duval Street" },
+        { "mi": 82.3, "name": "Southernmost Point", "note": "90 miles to Cuba" }
+      ]
+    },
+    {
+      "id": "acadia",
+      "name": "Acadia Park Loop",
+      "summary": "Acadia National Park in Maine: Park Loop Road past Sand Beach, Otter Cliff and Jordan Pond, then up to the summit of Cadillac Mountain.",
+      "miles": 23.3,
+      "videos": [
+        {
+          "youtube": "W94fTllBU7g", "title": "We Drove Acadia's MOST SCENIC Road - 4K Driving Adventure", "channel": "World of Drives", "fromName": "Hulls Cove Visitor Center", "toName": "Cadillac Mountain summit",
+          "note": "Paradise Hill Road and Park Loop Road, then up Cadillac Summit Road. Placed from the chapter list.",
+          "sync": [[0.2, 85], [7.5, 1314], [9.2, 1756], [12.51, 2324], [16.6, 2841], [19.86, 3487], [22.96, 4072]]
+        }
+      ],
+      "waypoints": [
+        { "name": "Hulls Cove Visitor Center, ME", "lat": 44.4085, "lon": -68.2460 },
+        { "name": "Sand Beach, ME", "lat": 44.3299, "lon": -68.1840 },
+        { "name": "Otter Cliff, ME", "lat": 44.3106, "lon": -68.1889 },
+        { "name": "Jordan Pond House, ME", "lat": 44.3206, "lon": -68.2535 },
+        { "name": "Cadillac Mountain summit, ME", "lat": 44.3529, "lon": -68.2239 }
+      ],
+      "coverage": { "percent": 89.3, "longestGapMi": 2.4, "medianPhotoYear": 2015 },
+      "landmarks": [
+        { "mi": 0.2, "name": "Hulls Cove Visitor Center" },
+        { "mi": 4.4, "name": "Great Meadow" },
+        { "mi": 5.6, "name": "Champlain Mountain" },
+        { "mi": 7.5, "name": "Sand Beach" },
+        { "mi": 8.2, "name": "Thunder Hole", "note": "Waves boom in the rock cleft at high tide" },
+        { "mi": 9.2, "name": "Otter Cliff", "note": "Sea cliffs 110 feet tall" },
+        { "mi": 10.3, "name": "Otter Cove Causeway" },
+        { "mi": 12.5, "name": "Hunters Beach" },
+        { "mi": 16.6, "name": "Jordan Pond", "note": "Popovers at the Jordan Pond House" },
+        { "mi": 17.3, "name": "Bubble Rock" },
+        { "mi": 19.9, "name": "Cadillac Summit Road" },
+        { "mi": 23.0, "name": "Cadillac Mountain summit", "note": "Highest point on the U.S. Atlantic coast" }
+      ]
+    },
+    {
+      "id": "smoky-mountains",
+      "name": "Smoky Mountains",
+      "summary": "From Pigeon Forge around Gatlinburg into Great Smoky Mountains National Park, up Newfound Gap Road to the Tennessee-North Carolina line, and back down to Gatlinburg.",
+      "miles": 39.2,
+      "videos": [
+        {
+          "youtube": "xIx53MWI16g", "title": "Newfound Gap Road Scenic Drive in 4K | Smoky Mountains Fall Colors", "channel": "By Any Route", "fromName": "Park entrance", "toName": "Newfound Gap",
+          "note": "Fall colors, filmed late October 2026. Up the Gatlinburg Spur and Newfound Gap Road. Placed from the chapter list; split at the stop at Newfound Gap.",
+          "sync": [[1.85, 781], [7.5, 1145], [10.3, 1711], [23.5, 3375]]
+        },
+        {
+          "youtube": "xIx53MWI16g", "title": "Newfound Gap Road Scenic Drive in 4K | Smoky Mountains Fall Colors", "channel": "By Any Route", "fromName": "Newfound Gap", "toName": "Gatlinburg",
+          "note": "Back down Newfound Gap Road to Gatlinburg.",
+          "sync": [[23.5, 3532], [38.6, 5636]]
+        }
+      ],
+      "waypoints": [
+        { "name": "Pigeon Forge, TN", "lat": 35.7884, "lon": -83.5543 },
+        { "name": "Gatlinburg Bypass, TN", "lat": 35.7117, "lon": -83.5298 },
+        { "name": "Sugarlands Visitor Center, TN", "lat": 35.6857, "lon": -83.5366 },
+        { "name": "Newfound Gap, TN/NC", "lat": 35.6111, "lon": -83.4252 },
+        { "name": "Gatlinburg, TN", "lat": 35.7143, "lon": -83.5102 }
+      ],
+      "coverage": { "percent": 100, "longestGapMi": 0, "medianPhotoYear": 2025 },
+      "landmarks": [
+        { "mi": 1.9, "name": "Great Smoky Mountains National Park", "note": "The Gatlinburg Spur" },
+        { "mi": 5.2, "name": "Gatlinburg Welcome Center" },
+        { "mi": 7.8, "name": "Gatlinburg Bypass", "note": "Views of Mount Le Conte" },
+        { "mi": 10.3, "name": "Sugarlands Visitor Center" },
+        { "mi": 17.5, "name": "Chimney Tops Trailhead" },
+        { "mi": 23.5, "name": "Newfound Gap", "note": "Tennessee-North Carolina line, 5,046 feet" },
+        { "mi": 28.0, "name": "Alum Cave Trailhead" },
+        { "mi": 36.4, "name": "Sugarlands Visitor Center" },
+        { "mi": 38.6, "name": "Gatlinburg" }
+      ]
+    },
+    {
+      "id": "glacier",
+      "name": "Going-to-the-Sun Road",
+      "summary": "Glacier National Park in Montana: along Lake McDonald, up past the Weeping Wall to Logan Pass on the Continental Divide, and down past St. Mary Lake.",
+      "miles": 50.4,
+      "videos": [
+        {
+          "youtube": "nte4LCVh7-E", "title": "Glacier National Park Going-to-the-Sun Road Scenic Drive 4K Montana", "channel": "AdventureEveryDay", "fromName": "West Glacier", "toName": "The Loop",
+          "note": "The video is two drives: this part (from 1:01:10) is the lower road from West Glacier along Lake McDonald. Placed from the chapter list and storyboard frames.",
+          "sync": [[0.3, 3670], [2.3, 3910], [12.6, 5095], [24.5, 6140]]
+        },
+        {
+          "youtube": "nte4LCVh7-E", "title": "Glacier National Park Going-to-the-Sun Road Scenic Drive 4K Montana", "channel": "AdventureEveryDay", "fromName": "The Loop", "toName": "St. Mary",
+          "note": "The first part of the video: from The Loop up to Logan Pass and down past St. Mary Lake.",
+          "sync": [[24.5, 65], [32.3, 1642], [49.82, 3600]]
+        }
+      ],
+      "waypoints": [
+        { "name": "West Glacier, MT", "lat": 48.4963, "lon": -113.9824 },
+        { "name": "Lake McDonald Lodge, MT", "lat": 48.6174, "lon": -113.8791 },
+        { "name": "Logan Pass, MT", "lat": 48.6953, "lon": -113.7180 },
+        { "name": "St. Mary, MT", "lat": 48.7439, "lon": -113.4295 }
+      ],
+      "coverage": { "percent": 99.6, "longestGapMi": 0.1, "medianPhotoYear": 2020 },
+      "landmarks": [
+        { "mi": 0.3, "name": "West Glacier" },
+        { "mi": 2.3, "name": "Lake McDonald", "note": "The biggest lake in the park" },
+        { "mi": 11.0, "name": "Lake McDonald Lodge" },
+        { "mi": 16.5, "name": "Trail of the Cedars" },
+        { "mi": 24.5, "name": "The Loop", "note": "The one big hairpin turn" },
+        { "mi": 29.2, "name": "Weeping Wall", "note": "Waterfalls spill onto the road" },
+        { "mi": 32.3, "name": "Logan Pass", "note": "Continental Divide, 6,646 feet" },
+        { "mi": 35.0, "name": "Siyeh Bend" },
+        { "mi": 37.0, "name": "Jackson Glacier Overlook" },
+        { "mi": 39.8, "name": "Sunrift Gorge" },
+        { "mi": 41.5, "name": "Wild Goose Island", "note": "On St. Mary Lake" },
+        { "mi": 49.8, "name": "St. Mary Visitor Center" }
+      ]
     }
   ]
 }
