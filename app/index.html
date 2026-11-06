@@ -92,6 +92,9 @@ button,select,input{font:inherit;color:inherit}
 .pv{fill:none;stroke:var(--sign);stroke-width:3;stroke-dasharray:7 6;opacity:.75}
 .orl{fill:none;stroke-width:2.5;stroke-dasharray:4 5;opacity:.6}
 #map{cursor:crosshair}
+.shelf{margin-bottom:14px}.shelf ul{list-style:none;margin:6px 0 0;padding:0}
+.shelf li{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.shelf li .n{flex:1;min-width:180px;font-weight:700}.shelf li .m{display:block;font-family:var(--mono);font-weight:400;color:var(--muted);font-size:13px}
 .jlist{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px;font-size:14px}
 .jlist li{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding-bottom:6px}
 .jlist li span:last-child{font-family:var(--mono);color:var(--muted);white-space:nowrap}
@@ -226,7 +229,7 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
   </header>
 
   <div class="msg" id="msg" hidden></div>
-  <div class="arrived" id="rideDone" hidden style="margin:0;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center"><span id="rideDoneTxt" style="flex:1;min-width:240px"></span><button class="btn primary" id="btnAgain" type="button">Resume ride</button></div>
+  <div class="arrived" id="rideDone" hidden style="margin:0;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center"><span id="rideDoneTxt" style="flex:1;min-width:240px"></span><button class="btn" id="btnSwitch" type="button" hidden>Switch ride</button><button class="btn primary" id="btnAgain" type="button">Resume ride</button></div>
   <details class="panel" id="btLogBox" hidden><summary class="note" style="cursor:pointer;font-weight:700">Sensor connection details</summary><pre id="btLog" style="margin:10px 0 0;font-family:var(--mono);font-size:12px;white-space:pre-wrap;user-select:all"></pre></details>
 
   <section class="panel" aria-label="Live ride">
@@ -252,6 +255,7 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
   <section class="panel map" aria-label="Journey">
     <div class="confirm" id="confirmBox" hidden><span id="confirmTxt"></span><button class="btn" id="cfYes" type="button">Start new journey</button><button class="btn" id="cfNo" type="button">Keep riding</button></div>
     <div class="arrived" id="arrived" hidden></div>
+    <div class="shelf" id="shelf" hidden><h2>Rides in progress</h2><ul id="shelfList"></ul></div>
     <div class="seg" role="group" aria-label="Kind of journey" id="planKind"><button id="kCities" type="button" aria-pressed="true">Pick two cities</button><button id="kScenic" type="button" aria-pressed="false">Scenic routes</button></div>
     <div class="routes" id="routeList" hidden></div>
     <div class="planner" id="planner">
@@ -367,7 +371,7 @@ const comma = n => Math.round(n).toLocaleString('en-US');
 
 /* ---------- state ---------- */
 const DEFAULTS = {target:50, grace:10, ft:15, lb:170, away:5, sound:'chime', vol:0.6, nick:'', mode:'separate'};
-let S = {settings:{...DEFAULTS}, totalMi:0, days:{}, journey:null, done:[]};   // persisted
+let S = {settings:{...DEFAULTS}, totalMi:0, days:{}, journey:null, done:[], shelf:[]};   // persisted
 const live = {rpm:0, revs:null, lastEvt:null, lastRevAt:0, sesMi:0, sesSec:0, sesCal:0, belowSince:null, stoppedSince:null, lastAlert:0, pedaledOnce:false, paused:false, sim:false, simRpm:0, simAcc:0};
 let dirty = false, db = null, uid = null, userCap = null, riders = [];
 
@@ -376,7 +380,7 @@ function weekStart(d=new Date()){const x=new Date(d);x.setHours(0,0,0,0);x.setDa
 function weekMi(){const ws=weekStart();let t=0;for(const[k,v] of Object.entries(S.days)){const [y,m,dd]=k.split('-').map(Number);if(new Date(y,m-1,dd)>=ws)t+=v.mi}return t}
 function today(){return S.days[dayKey()]||(S.days[dayKey()]={mi:0,min:0})}
 
-function loadLocal(){try{const r=localStorage.getItem('pedal-v1');if(r){const o=JSON.parse(r);S={settings:{...DEFAULTS,...o.settings},totalMi:o.totalMi||0,days:o.days||{},journey:o.journey||null,done:o.done||[],chal:o.chal||null}}}catch(e){}}
+function loadLocal(){try{const r=localStorage.getItem('pedal-v1');if(r){const o=JSON.parse(r);S={settings:{...DEFAULTS,...o.settings},totalMi:o.totalMi||0,days:o.days||{},journey:o.journey||null,done:o.done||[],chal:o.chal||null,shelf:o.shelf||[]}}}catch(e){}}
 function saveLocal(){try{localStorage.setItem('pedal-v1',JSON.stringify(S))}catch(e){}}
 function pruneDays(){const keys=Object.keys(S.days).sort();while(keys.length>120)delete S.days[keys.shift()]}
 
@@ -566,8 +570,8 @@ function linePts(a,b,f=1){const out=[],N=48;for(let i=0;i<=N;i++){const p=interp
 
 /* ---------- journey state ---------- */
 // S.journey = {a, b (city names) | route (scenic route id), start (lifetime miles when it began), started, ended?}; S.done = recent finished journeys
-function jInfo(){
-  const j=S.journey;if(!j)return null;const raw=Math.max(0,S.totalMi-j.start);
+function jInfo(j=S.journey,tot=S.totalMi){
+  if(!j)return null;const raw=Math.max(0,tot-j.start);
   if(j.route){const r=SC.byId.get(j.route);if(!r)return null;
     const from=j.from||0,to=Math.min(j.to||r.D,r.D),v=j.to&&r.videos.length?r.videos[r.videos.length-1]:null,pos=from+raw;   // from/to: a ride over part of the route (the video stretch)
     const v0=j.to&&r.videos.length?r.videos[0]:null,prog=Math.min(pos,to);
@@ -631,7 +635,7 @@ function renderRouteList(){
     c.append(btns);box.append(c)});
 }
 function startScenic(id,span){
-  S.journey={route:id,start:S.totalMi,started:dayKey()};
+  shelve();S.journey={route:id,start:S.totalMi,started:dayKey()};
   if(span){S.journey.from=span[0];S.journey.to=span[1];try{localStorage.setItem(VID_KEY,'video')}catch(e){}}plan.open=false;$('confirmBox').hidden=true;dirty=true;
   renderPlanner();saveAll();
 }
@@ -782,7 +786,7 @@ function onMapClick(ev){
 }
 function renderPlanner(){
   const scen=plan.open&&plan.kind==='scenic';
-  $('planKind').hidden=!plan.open;$('kCities').setAttribute('aria-pressed',!scen);$('kScenic').setAttribute('aria-pressed',scen);
+  renderShelf();$('planKind').hidden=!plan.open;$('kCities').setAttribute('aria-pressed',!scen);$('kScenic').setAttribute('aria-pressed',scen);
   $('planner').hidden=!plan.open||scen;$('routeList').hidden=!scen;$('mapgrid').hidden=scen;if(scen)renderRouteList();
   $('lFrom').classList.toggle('active',plan.open&&plan.step===0);$('lTo').classList.toggle('active',plan.open&&plan.step===1);
   $('btnGo').disabled=!(plan.a&&plan.b&&plan.a!==plan.b);
@@ -835,7 +839,7 @@ function renderTrip(){
   $('tripBar').style.width=(prog/D*100)+'%';
   $('eta').textContent=arrived?'Plan your next journey to keep going.':'At '+st.target+' RPM, an hour a day gets you there in about '+etaTxt(D-prog)+'.';
   $('arrived').hidden=!arrived;if(arrived)$('arrived').textContent='You made it to '+b.n+'! That\'s '+comma(D)+' miles from '+a.n+'.';
-  $('btnNew').textContent=arrived?'Plan next journey':'New journey';
+  $('btnNew').textContent=arrived?'Plan next journey':S.shelf&&S.shelf.length?'New or saved journey':'New journey';
   renderOthers();
 }
 /* ---------- street map for scenic routes (Leaflet + OpenStreetMap tiles; falls back to the SVG map) ---------- */
@@ -931,7 +935,7 @@ function renderScenic(J){
   $('tripBar').style.width=(frac*100)+'%';
   $('eta').textContent=arrived?'Pick another route to keep going.':'At '+st.target+' RPM, an hour a day gets you to the finish in about '+etaTxt(D-prog)+'.';
   $('arrived').hidden=!arrived;if(arrived)$('arrived').textContent='You finished '+J.label+'! That\'s '+comma(len)+' miles.';
-  $('btnNew').textContent=arrived?'Pick next route':'New journey';
+  $('btnNew').textContent=arrived?'Pick next route':S.shelf&&S.shelf.length?'New or saved journey':'New journey';
   // the sign over the photo: show the next landmark from a mile out, then "now passing" for a short stretch
   const ps=$('phSign');
   if(next&&next.mi-prog<=1){ps.hidden=false;$('phSignK').textContent='Coming up';$('phSignT').textContent=next.name;$('phSignD').textContent=fmt1(Math.max(0,next.mi-prog))+' mi'}
@@ -951,8 +955,29 @@ function renderScenic(J){
 function etaTxt(mi){const perHour=S.settings.target*S.settings.ft*60/5280,days=mi/perHour;return days>60?Math.round(days/30.4)+' months':days>=1.5?Math.ceil(days)+' days':Math.max(1,Math.round(days*60))+' minutes of pedaling'}
 function openPlanner(){const J=jInfo();plan.open=true;if(J&&J.scenic)plan.kind='scenic';plan.a=J&&!J.scenic?(J.arrived?J.b:J.a):plan.a;plan.b=null;plan.step=plan.a?1:0;
   $('pFrom').value=plan.a?plan.a.n:'';$('pTo').value='';$('confirmBox').hidden=true;renderPlanner()}
+// Rides in progress: an unfinished journey is set aside (not ended) when you start or switch to another one.
+// S.shelf = [{j: journey, at: lifetime miles when set aside, saved: day}]; continuing one shifts its start so
+// miles ridden elsewhere don't count toward it.
+function shelve(){const J=jInfo();if(!J||J.arrived||S.journey.race)return false;
+  S.shelf=[{j:S.journey,at:S.totalMi,saved:dayKey()},...(S.shelf||[])].slice(0,12);return true}
+function continueRide(i){const it=S.shelf[i];if(!it)return;S.shelf.splice(i,1);shelve();
+  S.journey={...it.j,start:it.j.start+(S.totalMi-it.at)};plan.open=false;$('confirmBox').hidden=true;dirty=true;renderAll();saveAll();
+  $('jTitle').scrollIntoView({block:'nearest'})}
+function removeRide(i){const it=S.shelf[i],J=it&&jInfo(it.j,it.at);if(!J)return;
+  if(!confirm('Remove '+J.label+' from your rides in progress? Your miles stay in the logbook.'))return;
+  S.shelf.splice(i,1);dirty=true;renderPlanner();saveAll()}
+function renderShelf(){
+  const L=(S.shelf||[]).map((it,i)=>({i,J:jInfo(it.j,it.at),saved:it.saved})).filter(x=>x.J);
+  $('shelf').hidden=!plan.open||!L.length;const ul=$('shelfList');ul.textContent='';
+  L.forEach(({i,J,saved})=>{const li=document.createElement('li'),n=document.createElement('span'),m=document.createElement('span');n.className='n';m.className='m';
+    n.textContent=J.label;m.textContent='Mile '+fmt1(J.trip)+' of '+fmt1(J.len)+' · '+fmt1(J.len-J.trip)+' mi to go'+(saved?' · set aside '+keyDate(saved).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'');n.append(m);
+    const go=document.createElement('button');go.type='button';go.className='btn primary';go.textContent='Continue';go.onclick=()=>continueRide(i);
+    const rm=document.createElement('button');rm.type='button';rm.className='btn';rm.textContent='Remove';rm.onclick=()=>removeRide(i);
+    li.append(n,go,rm);ul.append(li)});
+  $('btnSwitch').hidden=!L.length;
+}
 function startJourney(){
-  if(!plan.a||!plan.b||plan.a===plan.b)return;
+  if(!plan.a||!plan.b||plan.a===plan.b)return;shelve();
   S.journey={a:plan.a.n,b:plan.b.n,start:S.totalMi,started:dayKey()};plan.open=false;$('confirmBox').hidden=true;dirty=true;
   renderPlanner();saveAll();
 }
@@ -1198,9 +1223,9 @@ $('btnFamNew').addEventListener('click',()=>{if(famCode()&&!confirm('Replace you
 $('modeTog').addEventListener('click',()=>setMode('together'));
 $('btnSwap').addEventListener('click',()=>{[plan.a,plan.b]=[plan.b,plan.a];$('pFrom').value=plan.a?plan.a.n:'';$('pTo').value=plan.b?plan.b.n:'';renderPlanner()});
 $('btnGo').addEventListener('click',startJourney);
-$('btnNew').addEventListener('click',()=>{const J=jInfo();
-  if(J&&!J.arrived){$('confirmTxt').textContent='You\'re '+comma(J.trip)+' of '+comma(J.len)+' miles into '+J.label+'. A new journey ends this one; your miles stay in the logbook.';$('confirmBox').hidden=false}
-  else openPlanner()});
+$('btnNew').addEventListener('click',newOrSwitch);
+function newOrSwitch(){openPlanner();if(shelve()){S.journey=null;dirty=true;renderAll();saveAll()}$('jTitle').closest('section').scrollIntoView({block:'start'})}
+$('btnSwitch').addEventListener('click',newOrSwitch);
 $('cfYes').addEventListener('click',openPlanner);
 $('cfNo').addEventListener('click',()=>{$('confirmBox').hidden=true});
 ['pFrom','pTo'].forEach((id,i)=>{
