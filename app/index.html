@@ -57,6 +57,19 @@ button,select,input{font:inherit;color:inherit}
 .stat{display:flex;flex-direction:column;justify-content:center;gap:2px;border-left:1px solid var(--line);padding-left:16px}
 .stat .v{font-family:var(--mono);font-size:30px;font-weight:600;font-variant-numeric:tabular-nums}
 .stat .l{font-size:13px;color:var(--muted);font-weight:600}
+.goal{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);font-size:14px}
+.goal .gl{font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.goal .seg{margin:0}.goal .seg button{padding:5px 12px}
+.goal label{display:flex;align-items:center;gap:6px;color:var(--muted);font-weight:600}
+.goal input{width:70px;font:inherit;font-family:var(--mono);padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.goal .bar{flex:1;min-width:120px}.goal .gt{font-family:var(--mono);font-weight:600;white-space:nowrap}
+.goal.hit .bar b{background:var(--ok)}.goal.hit .gt{color:var(--ok)}
+body.riding .goal{margin-top:8px;padding-top:8px}
+.rdtop{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}.rdtop>span{flex:1;min-width:240px}
+.rdgoal{margin-top:8px}.rdgoal:empty{display:none}
+#rideHist table,#sesHist table{margin-top:10px}#rideHist{background:var(--panel);color:var(--ink);border-radius:8px;padding:2px 10px 8px;margin-top:10px;font-weight:400}
+#rideHist:empty{display:none}
+tr.cur td{font-weight:800}td.best{color:var(--ok)}
 .sim{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);font-size:14px;color:var(--muted)}
 .sim input[type=range]{flex:1;min-width:140px;accent-color:var(--sign)}
 /* map */
@@ -229,7 +242,7 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
   </header>
 
   <div class="msg" id="msg" hidden></div>
-  <div class="arrived" id="rideDone" hidden style="margin:0;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center"><span id="rideDoneTxt" style="flex:1;min-width:240px"></span><button class="btn" id="btnSwitch" type="button" hidden>Switch ride</button><button class="btn primary" id="btnAgain" type="button">Resume ride</button></div>
+  <div class="arrived" id="rideDone" hidden style="margin:0"><div class="rdtop"><span id="rideDoneTxt"></span><button class="btn" id="btnSwitch" type="button" hidden>Switch ride</button><button class="btn primary" id="btnAgain" type="button">Resume ride</button></div><div class="rdgoal" id="rideGoal"></div><div id="rideHist"></div></div>
   <details class="panel" id="btLogBox" hidden><summary class="note" style="cursor:pointer;font-weight:700">Sensor connection details</summary><pre id="btLog" style="margin:10px 0 0;font-family:var(--mono);font-size:12px;white-space:pre-wrap;user-select:all"></pre></details>
 
   <section class="panel" aria-label="Live ride">
@@ -244,6 +257,13 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
       <div class="stat"><span class="v" id="sesMi">0.00</span><span class="l">miles this session</span></div>
       <div class="stat"><span class="v" id="sesTime">0:00</span><span class="l">pedaling time</span></div>
       <div class="stat" title="Estimate from your cadence and the weight in Settings"><span class="v" id="sesCal">0</span><span class="l">calories</span></div>
+    </div>
+    <div class="goal" id="goalRow">
+      <span class="gl">Ride goal</span>
+      <div class="seg" role="group" aria-label="Ride goal" id="goalSeg"><button type="button" data-g="none">None</button><button type="button" data-g="time">Time</button><button type="button" data-g="dist">Distance</button></div>
+      <label id="goalValL" for="goalVal"><input type="number" id="goalVal" min="1" max="600" step="1" aria-label="Goal amount"><span id="goalUnit">min</span></label>
+      <div class="bar" id="goalBarW"><b id="goalBar" style="width:0%"></b></div>
+      <span class="gt" id="goalTxt"></span>
     </div>
     <div class="sim">
       <label for="simOn" style="display:flex;gap:6px;align-items:center;font-weight:700;color:var(--ink)"><input type="checkbox" id="simOn"> Simulator</label>
@@ -307,6 +327,9 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
       </div>
       <svg id="chart" viewBox="0 0 520 170" role="img" aria-label="Miles per day, last 14 days"></svg>
       <div class="note" id="minNote"></div>
+      <h2 style="margin-top:16px" id="sesH" hidden>Recent rides</h2>
+      <div class="note" id="sesTrend"></div>
+      <div id="sesHist"></div>
       <h2 style="margin-top:16px" id="jDoneH" hidden>Completed journeys</h2>
       <ul class="jlist" id="jDone"></ul>
     </section>
@@ -370,9 +393,9 @@ const fmt1 = n => n.toFixed(1), fmt2 = n => n.toFixed(2);
 const comma = n => Math.round(n).toLocaleString('en-US');
 
 /* ---------- state ---------- */
-const DEFAULTS = {target:50, grace:10, ft:15, lb:170, away:5, sound:'chime', vol:0.6, nick:'', mode:'separate'};
-let S = {settings:{...DEFAULTS}, totalMi:0, days:{}, journey:null, done:[], shelf:[]};   // persisted
-const live = {rpm:0, revs:null, lastEvt:null, lastRevAt:0, sesMi:0, sesSec:0, sesCal:0, belowSince:null, stoppedSince:null, lastAlert:0, pedaledOnce:false, paused:false, sim:false, simRpm:0, simAcc:0};
+const DEFAULTS = {target:50, grace:10, ft:15, lb:170, goalKind:'none', goalMin:30, goalMi:5, away:5, sound:'chime', vol:0.6, nick:'', mode:'separate'};
+let S = {settings:{...DEFAULTS}, totalMi:0, days:{}, journey:null, done:[], shelf:[], sessions:[], cur:null};   // persisted
+const live = {rpm:0, revs:null, lastEvt:null, lastRevAt:0, sesMi:0, sesSec:0, sesCal:0, sesStart:0, gHit:false, gRes:0, gK:null, gV:null, belowSince:null, stoppedSince:null, lastAlert:0, pedaledOnce:false, paused:false, sim:false, simRpm:0, simAcc:0};
 let dirty = false, db = null, uid = null, userCap = null, riders = [];
 
 const dayKey = (d=new Date()) => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -380,7 +403,7 @@ function weekStart(d=new Date()){const x=new Date(d);x.setHours(0,0,0,0);x.setDa
 function weekMi(){const ws=weekStart();let t=0;for(const[k,v] of Object.entries(S.days)){const [y,m,dd]=k.split('-').map(Number);if(new Date(y,m-1,dd)>=ws)t+=v.mi}return t}
 function today(){return S.days[dayKey()]||(S.days[dayKey()]={mi:0,min:0})}
 
-function loadLocal(){try{const r=localStorage.getItem('pedal-v1');if(r){const o=JSON.parse(r);S={settings:{...DEFAULTS,...o.settings},totalMi:o.totalMi||0,days:o.days||{},journey:o.journey||null,done:o.done||[],chal:o.chal||null,shelf:o.shelf||[]}}}catch(e){}}
+function loadLocal(){try{const r=localStorage.getItem('pedal-v1');if(r){const o=JSON.parse(r);S={settings:{...DEFAULTS,...o.settings},totalMi:o.totalMi||0,days:o.days||{},journey:o.journey||null,done:o.done||[],chal:o.chal||null,shelf:o.shelf||[],sessions:o.sessions||[],cur:o.cur||null}}}catch(e){}}
 function saveLocal(){try{localStorage.setItem('pedal-v1',JSON.stringify(S))}catch(e){}}
 function pruneDays(){const keys=Object.keys(S.days).sort();while(keys.length>120)delete S.days[keys.shift()]}
 
@@ -476,10 +499,79 @@ function calPerSec(rpm){const met=Math.min(7,1.5+0.04*rpm),kg=(S.settings.lb||17
 /* ---------- simulator ---------- */
 function setSim(on){if(on)resumeRide();live.sim=on;$('simRpm').disabled=!on;if(on){audio();setConn(true,'Simulator')}else{live.simRpm=0;$('simRpm').value=0;$('simVal').textContent='0 RPM';if(!btDev||!btDev.gatt.connected)setConn(false,'No sensor')}}
 
+/* ---------- ride sessions and goals ---------- */
+// A session runs from the first pedal turn until Pause ride (or a 30-minute stop). Each one is kept in S.sessions
+// as {t start ms, sec pedaling, mi, cal, gk goal kind ('time'|'dist'|''), gv goal amount, gr result: miles ridden in a
+// time goal, or seconds taken for a distance goal; 0 = goal not reached}.
+// S.cur is the session in progress, so a reload within 30 minutes carries on with it.
+const SPLIT_MS=30*60000;
+function fmtDur(sec){const s=Math.round(sec);return Math.floor(s/3600)?Math.floor(s/3600)+':'+String(Math.floor(s/60)%60).padStart(2,'0')+':'+String(s%60).padStart(2,'0'):Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
+function fmtMin(sec){const m=Math.round(sec/60);return sec<60?Math.round(sec)+' sec':m>=60?Math.floor(m/60)+' hr '+(m%60)+' min':m+' min'}
+function sesRecord(){
+  if(!(live.sesMi>=0.05||live.sesSec>=60))return null;
+  const st=S.settings,k=live.gHit?live.gK:st.goalKind,v=live.gHit?live.gV:(k==='time'?st.goalMin:st.goalMi);
+  const r={t:live.sesStart||Date.now(),sec:Math.round(live.sesSec),mi:Math.round(live.sesMi*100)/100,cal:Math.round(live.sesCal),
+    gk:k==='none'?'':k,gv:k==='none'?0:v,gr:live.gHit?Math.round(live.gRes*100)/100:0};
+  S.sessions.push(r);if(S.sessions.length>300)S.sessions.splice(0,S.sessions.length-300);dirty=true;return r}
+function sesReset(){live.sesMi=live.sesSec=live.sesCal=live.sesStart=live.gRes=0;live.gHit=false;live.gK=live.gV=null}
+function sesSnapshot(){S.cur=!live.ended&&live.sesSec>0?{t:live.sesStart,mi:live.sesMi,sec:live.sesSec,cal:live.sesCal,gHit:live.gHit,gRes:live.gRes,gK:live.gK,gV:live.gV,upd:Date.now()}:null}
+function sesRestore(){const c=S.cur;if(!c)return;S.cur=null;
+  live.sesStart=c.t;live.sesMi=c.mi;live.sesSec=c.sec;live.sesCal=c.cal;live.gHit=c.gHit;live.gRes=c.gRes;live.gK=c.gK;live.gV=c.gV;
+  if(Date.now()-c.upd>SPLIT_MS){sesRecord();sesReset();saveLocal()}}
+function checkGoal(){
+  const st=S.settings,k=st.goalKind;if(live.gHit||k==='none')return;
+  if(k==='time'?live.sesSec>=st.goalMin*60:live.sesMi>=st.goalMi){live.gHit=true;live.gK=k;live.gV=k==='time'?st.goalMin:st.goalMi;live.gRes=k==='time'?live.sesMi:live.sesSec;dirty=true;
+    [[523,0],[659,.15],[784,.3],[1047,.45]].forEach(([f,t])=>tone(f,t,.5,'sine',.5))}}
+function renderGoal(){
+  const st=S.settings,k=st.goalKind;
+  document.querySelectorAll('#goalSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.g===k));
+  $('goalValL').hidden=$('goalBarW').hidden=k==='none';$('goalUnit').textContent=k==='time'?'min':'mi';
+  const gv=$('goalVal');if(document.activeElement!==gv){gv.value=k==='time'?st.goalMin:st.goalMi;gv.step=k==='time'?'5':'0.5';gv.min=k==='time'?'1':'0.5'}
+  let pct=0,txt='';
+  if(live.gHit){pct=100;txt=live.gK==='time'?'Done! '+fmt2(live.gRes)+' mi in '+live.gV+' min':'Done! '+live.gV+' mi in '+fmtDur(live.gRes)}
+  else if(k==='time'){pct=live.sesSec/(st.goalMin*60)*100;txt=fmtDur(Math.max(0,st.goalMin*60-live.sesSec))+' to go'}
+  else if(k==='dist'){pct=live.sesMi/st.goalMi*100;txt=fmt2(Math.max(0,st.goalMi-live.sesMi))+' mi to go'}
+  else txt='Set a time or distance to aim for each ride.';
+  $('goalRow').classList.toggle('hit',live.gHit);$('goalBar').style.width=Math.min(100,pct)+'%';$('goalTxt').textContent=txt}
+const goalName=r=>r.gk==='time'?r.gv+' min':r.gv+' mi';
+// how this session did against its goal and against earlier sessions with the same goal
+function goalVerdict(r){
+  if(!r)return'';
+  if(!r.gk){const ps=S.sessions.filter(x=>x!==r&&x.sec>=60).slice(-5);if(!ps.length||r.sec<60)return'';
+    const avg=ps.reduce((a,x)=>a+x.mi,0)/ps.reduce((a,x)=>a+x.sec,0)*3600,my=r.mi/r.sec*3600;
+    return 'Average speed '+fmt1(my)+' mph, '+(Math.abs(my-avg)<0.05?'the same as':my>avg?'up from':'down from')+' '+fmt1(avg)+' over your last '+ps.length+' ride'+(ps.length>1?'s':'')+'. Set a ride goal to compare rides of the same length.'}
+  if(!r.gr)return r.gk==='time'?'Goal: '+r.gv+' min. You rode '+fmtMin(r.sec)+', '+fmtMin(r.gv*60-r.sec)+' short.':'Goal: '+r.gv+' mi. You rode '+fmt2(r.mi)+' mi, '+fmt2(r.gv-r.mi)+' mi short.';
+  const prev=S.sessions.filter(x=>x!==r&&x.gk===r.gk&&x.gv===r.gv&&x.gr>0);
+  if(r.gk==='time'){let t='Goal reached: '+fmt2(r.gr)+' miles in '+r.gv+' minutes.';
+    if(!prev.length)return t+' This is your first '+r.gv+'-minute ride, so it\'s the one to beat.';
+    const last=prev[prev.length-1].gr,best=Math.max(...prev.map(x=>x.gr)),d=r.gr-last;
+    return t+' Last time: '+fmt2(last)+' mi ('+(d>=0?'+':'−')+fmt2(Math.abs(d))+').'+(r.gr>best?' New best!':' Your best: '+fmt2(best)+' mi.')}
+  let t='Goal reached: '+r.gv+' miles in '+fmtDur(r.gr)+'.';
+  if(!prev.length)return t+' This is your first '+r.gv+'-mile ride, so it\'s the one to beat.';
+  const last=prev[prev.length-1].gr,best=Math.min(...prev.map(x=>x.gr)),d=last-r.gr;
+  return t+' Last time: '+fmtDur(last)+' ('+(Math.abs(d)<1?'same time':fmtMin(Math.abs(d))+(d>0?' faster':' slower'))+').'+(r.gr<best?' New best!':' Your best: '+fmtDur(best)+'.')}
+function sesTrend(){
+  const L=S.sessions.filter(x=>x.sec>=60),ws=weekStart().getTime(),wk=L.filter(x=>x.t>=ws),out=[];
+  if(wk.length)out.push('This week: '+wk.length+' ride'+(wk.length>1?'s':'')+', '+fmtMin(wk.reduce((a,x)=>a+x.sec,0))+', '+fmt1(wk.reduce((a,x)=>a+x.mi,0))+' mi.');
+  if(L.length>=6){const sp=a=>a.reduce((s,x)=>s+x.mi,0)/a.reduce((s,x)=>s+x.sec,0)*3600,a=sp(L.slice(-5)),b=sp(L.slice(-10,-5)),d=a-b;
+    out.push('Average speed over your last 5 rides: '+fmt1(a)+' mph, '+(Math.abs(d)<0.05?'the same as':(d>0?'up ':'down ')+fmt1(Math.abs(d))+' from')+' the '+Math.min(5,L.length-5)+' before.')}
+  return out.join(' ')}
+function sesTable(box,n,cur){
+  box.textContent='';const L=S.sessions.slice(-n).reverse();if(!L.length)return;
+  const best=new Map();S.sessions.forEach(x=>{if(!x.gr)return;const k=x.gk+x.gv,b=best.get(k);if(!b||(x.gk==='time'?x.gr>b.gr:x.gr<b.gr))best.set(k,x)});
+  const t=document.createElement('table'),h=document.createElement('thead');h.innerHTML='<tr><th>When</th><th>Time</th><th>Miles</th><th>mph</th><th>Goal</th></tr>';t.append(h);
+  const tb=document.createElement('tbody');
+  L.forEach(x=>{const tr=document.createElement('tr');if(x===cur)tr.className='cur';const d=new Date(x.t);
+    const g=!x.gk?'—':x.gr?goalName(x)+' ✓ '+(x.gk==='time'?fmt2(x.gr)+' mi':fmtDur(x.gr)):goalName(x)+' · missed';
+    [d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+', '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),fmtMin(x.sec),fmt2(x.mi),x.sec>=30?fmt1(x.mi/x.sec*3600):'—',g]
+      .forEach((v,i)=>{const td=document.createElement('td');td.textContent=v;if(i===4&&best.get(x.gk+x.gv)===x){td.className='best';td.textContent+=' · best'}tr.append(td)});tb.append(tr)});
+  t.append(tb);box.append(t)}
+function renderSessions(){const has=S.sessions.length>0;$('sesH').hidden=!has;$('sesTrend').textContent=has?sesTrend():'';sesTable($('sesHist'),10)}
+
 /* ---------- ending a ride ---------- */
 // Saves, turns the sensor off (no reconnect loop), stops the alerts and the video, and shows a short summary.
 function endRide(){
-  const mi=live.sesMi,sec=live.sesSec,ft=S.settings.ft;
+  const mi=live.sesMi,sec=live.sesSec,ft=S.settings.ft,rec=live.ended?null:sesRecord();
   live.ended=true;live.rpm=0;live.belowSince=live.stoppedSince=null;
   if(live.sim){$('simOn').checked=false;setSim(false)}
   btStop=true;if(btDev&&btDev.gatt.connected){try{btDev.gatt.disconnect()}catch(e){}}
@@ -490,9 +582,12 @@ function endRide(){
   parts.push('Today: '+fmt1(today().mi)+' mi'+(today().kcal>=1?', about '+Math.round(today().kcal)+' calories':'')+'.');
   const J=jInfo();if(J)parts.push(J.arrived?'You finished '+J.label+'.':'You\'re at mile '+fmt1(J.trip)+' of '+J.label+', '+fmt1(J.D-J.prog)+' mi to go. You\'ll pick up right there next time.');
   parts.push('The sensor is off and alerts are stopped.');
-  $('rideDoneTxt').textContent=parts.join(' ');$('rideDone').hidden=false;
+  $('rideDoneTxt').textContent=parts.join(' ');$('rideGoal').textContent=goalVerdict(rec);
+  const hb=$('rideHist');hb.textContent='';
+  if(S.sessions.length>1||rec){const n=document.createElement('div');n.className='note';n.style.marginTop='8px';n.textContent=sesTrend();sesTable(hb,8,rec);if(n.textContent)hb.prepend(n)}
+  renderSessions();$('rideDone').hidden=false;
 }
-function resumeRide(){if(!live.ended)return;live.ended=false;live.sesMi=0;live.sesSec=0;live.sesCal=0;live.pedaledOnce=false;live.stoppedSince=live.belowSince=null;$('rideDone').hidden=true}
+function resumeRide(){if(!live.ended)return;live.ended=false;sesReset();live.pedaledOnce=false;live.stoppedSince=live.belowSince=null;$('rideDone').hidden=true}
 
 /* ---------- 1-second tick ---------- */
 let lastTick=performance.now();
@@ -504,10 +599,13 @@ function tick(){
     live.rpm=live.simRpm;
   }else if(now-live.lastRevAt>3000){live.rpm=0}
   const st=S.settings,moving=live.rpm>0.5;
+  if(moving&&live.sesSec>0&&live.stoppedSince!==null&&now-live.stoppedSince>SPLIT_MS){sesRecord();sesReset();renderSessions()}   // a long break starts a new session
+  if(moving&&!live.sesStart)live.sesStart=Date.now();
   if(moving){live.sesSec+=dt;today().min+=dt/60;const c=calPerSec(live.rpm)*dt;live.sesCal+=c;today().kcal=(today().kcal||0)+c;live.stoppedSince=null}
   else if(live.stoppedSince===null)live.stoppedSince=now;
   if(moving&&live.rpm<st.target){if(live.belowSince===null)live.belowSince=now}else if(moving)live.belowSince=null;
 
+  if(moving)checkGoal();
   syncChal();
   // status + alerts
   if(live.ended){$('status').textContent='Ride paused';$('status').className='status';document.title='Desk Ride Journeys';checkArrival();renderLive();return}
@@ -517,14 +615,15 @@ function tick(){
   else if(!moving){status=away?'Away · alerts paused':'Stopped';cls='stop'}
   else if(live.rpm<st.target){status='Too slow';cls='slow'}
   else{status='Pedaling';cls='ok'}
+  if(live.gHit&&live.pedaledOnce){status='Goal reached';cls='ok'}
   if(live.paused&&live.pedaledOnce)status+=' · muted';
   $('status').textContent=status;$('status').className='status '+cls;
   const graceMs=st.grace*1000;
-  if(!live.paused&&live.pedaledOnce&&!away){
+  if(!live.paused&&live.pedaledOnce&&!away&&!live.gHit){
     if(!moving&&now-live.stoppedSince>graceMs&&now-live.lastAlert>15000){play('stop');live.lastAlert=now}
     else if(moving&&live.belowSince!==null&&now-live.belowSince>graceMs&&now-live.lastAlert>8000){play('slow');live.lastAlert=now}
   }
-  document.title=(cls==='stop'&&!away&&!live.paused)?'⏸ Keep pedaling!':(cls==='slow'&&!live.paused)?'↓ Speed up · '+Math.round(live.rpm)+' RPM':'Desk Ride Journeys';
+  document.title=live.gHit?'Goal reached · Desk Ride':(cls==='stop'&&!away&&!live.paused)?'⏸ Keep pedaling!':(cls==='slow'&&!live.paused)?'↓ Speed up · '+Math.round(live.rpm)+' RPM':'Desk Ride Journeys';
   checkArrival();renderLive();
 }
 function renderLive(){
@@ -534,7 +633,7 @@ function renderLive(){
   $('rpmBar').style.width=Math.min(100,live.rpm/max*100)+'%';$('rpmTarget').style.left=(st.target/max*100)+'%';
   $('targetNote').textContent='Target '+st.target+' RPM · '+fmt1(st.target*st.ft*60/5280)+' mph';
   $('btnEnd').hidden=!!live.ended||!(live.pedaledOnce||live.sim||btDev);
-  $('spd').textContent=fmt1(mph);$('sesMi').textContent=fmt2(live.sesMi);$('sesCal').textContent=Math.round(live.sesCal);
+  $('spd').textContent=fmt1(mph);$('sesMi').textContent=fmt2(live.sesMi);$('sesCal').textContent=Math.round(live.sesCal);renderGoal();
   const s=Math.floor(live.sesSec);$('sesTime').textContent=Math.floor(s/3600)?Math.floor(s/3600)+':'+String(Math.floor(s/60)%60).padStart(2,'0')+':'+String(s%60).padStart(2,'0'):Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
   renderChal();$('tToday').textContent=fmt1(today().mi);$('tWeek').textContent=fmt1(weekMi());$('tAll').textContent=S.totalMi<100?fmt1(S.totalMi):comma(S.totalMi);
   renderTrip();
@@ -1158,11 +1257,12 @@ async function createChal(){
 /* ---------- persistence ---------- */
 let saving=false;
 async function saveAll(){
-  pruneDays();saveLocal();
+  pruneDays();sesSnapshot();saveLocal();
   pushRider();dirty=false;
 }
 setInterval(()=>{if(dirty)saveAll()},30000);
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&dirty)saveAll()});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&(dirty||live.sesSec>0))saveAll()});
+addEventListener('pagehide',()=>{sesSnapshot();saveLocal()});
 setInterval(renderChart,60000);
 
 // Family sharing: Firebase Firestore (project desk-ride-quindacy). Each family's riders live at families/{code}/riders/{riderId}.
@@ -1203,7 +1303,7 @@ for(const id in FIELDS){$(id).addEventListener('change',()=>{const k=FIELDS[id];
   if(['target','grace','ft','away','vol','lb'].includes(k)){v=parseFloat(v);const e=$(id);if(isNaN(v))v=DEFAULTS[k];v=Math.max(+e.min,Math.min(+e.max,v));e.value=v}
   S.settings[k]=v;dirty=true;renderAll();if(k==='nick')renderFamily();saveAll()})}
 
-function renderAll(){if(!S.journey&&!plan.open)openPlannerDefault();renderPlanner();renderLive();renderChart();renderFamily();renderDone()}
+function renderAll(){if(!S.journey&&!plan.open)openPlannerDefault();renderPlanner();renderLive();renderChart();renderSessions();renderFamily();renderDone()}
 
 /* ---------- wire up ---------- */
 $('btnConnect').addEventListener('click',connect);
@@ -1226,6 +1326,10 @@ $('btnGo').addEventListener('click',startJourney);
 $('btnNew').addEventListener('click',newOrSwitch);
 function newOrSwitch(){openPlanner();if(shelve()){S.journey=null;dirty=true;renderAll();saveAll()}$('jTitle').closest('section').scrollIntoView({block:'start'})}
 $('btnSwitch').addEventListener('click',newOrSwitch);
+document.querySelectorAll('#goalSeg button').forEach(b=>b.addEventListener('click',()=>{S.settings.goalKind=b.dataset.g;dirty=true;renderGoal();saveAll()}));
+$('goalVal').addEventListener('change',()=>{const st=S.settings,t=st.goalKind==='time';let v=parseFloat($('goalVal').value);
+  if(isNaN(v))v=t?30:5;v=t?Math.max(1,Math.min(600,Math.round(v))):Math.max(0.5,Math.min(200,Math.round(v*2)/2));
+  if(t)st.goalMin=v;else st.goalMi=v;$('goalVal').value=v;dirty=true;renderGoal();saveAll()});
 $('cfYes').addEventListener('click',openPlanner);
 $('cfNo').addEventListener('click',()=>{$('confirmBox').hidden=true});
 ['pFrom','pTo'].forEach((id,i)=>{
@@ -1243,7 +1347,7 @@ $('vToggle').addEventListener('click',e=>{e.stopPropagation();const b=e.target.c
 $('scene').addEventListener('click',e=>{if(LM.big&&!e.target.closest('a'))swapViews(false)});   // clicking the small photo makes it the big view
 $('tSlow').addEventListener('click',()=>play('slow'));$('tStop').addEventListener('click',()=>play('stop'));
 
-loadLocal();buildMap();applySettingsToForm();$('sMly').value=mlyToken();renderAll();
+loadLocal();sesRestore();buildMap();applySettingsToForm();$('sMly').value=mlyToken();renderAll();
 setInterval(tick,1000);
 initCloud();loadScenic();
 </script>
