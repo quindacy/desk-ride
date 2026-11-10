@@ -349,6 +349,12 @@ details.settings summary{cursor:pointer;font-weight:800;font-size:13px;text-tran
         <thead><tr><th>Rider</th><th>Today</th><th>Week</th><th>Total</th></tr></thead>
         <tbody id="famBody"></tbody>
       </table>
+      <div class="chal" id="bestBox" hidden>
+        <h3>Best rides</h3>
+        <div class="note" id="bestNote"></div>
+        <div class="seg" role="group" aria-label="Which ride goal" id="bestSeg" style="margin:8px 0 0"></div>
+        <table id="bestTable"><thead><tr><th>Rider</th><th id="bestH">Best</th><th>Last</th><th>Rides</th></tr></thead><tbody id="bestBody"></tbody></table>
+      </div>
       <div class="chal" id="chalBox" hidden>
         <h3 id="chalTitle"></h3>
         <div class="note" id="chalNote"></div>
@@ -568,10 +574,41 @@ function sesTable(box,n,cur){
   t.append(tb);box.append(t)}
 function renderSessions(){const has=S.sessions.length>0;$('sesH').hidden=!has;$('sesTrend').textContent=has?sesTrend():'';sesTable($('sesHist'),10)}
 
+// Best rides on the family board: for each goal you've reached, your best, your latest and how many times.
+// Shared as a short string in the rider record: "time30:4.32,4.1,6;dist5:1401,1500,2" (time goal = miles, distance goal = seconds).
+function goalStats(){const m=new Map();
+  S.sessions.forEach(x=>{if(!x.gr)return;const k=x.gk+x.gv;let g=m.get(k);if(!g){g={best:x.gr,last:x.gr,n:0,t:0};m.set(k,g)}
+    g.n++;g.last=x.gr;g.t=x.t;if(x.gk==='time'?x.gr>g.best:x.gr<g.best)g.best=x.gr});
+  return m}
+function goalBests(){return [...goalStats()].sort((a,b)=>b[1].t-a[1].t).slice(0,8).map(([k,g])=>k+':'+g.best+','+g.last+','+g.n).join(';')}
+function parseBests(str){const m=new Map();
+  String(str||'').split(';').forEach(p=>{const q=/^(time|dist)(\d+(?:\.\d+)?):([\d.]+),([\d.]+),(\d+)$/.exec(p);if(q)m.set(q[1]+q[2],{best:+q[3],last:+q[4],n:+q[5]})});return m}
+const goalKeyName=k=>k.startsWith('time')?k.slice(4)+' min':k.slice(4)+' mi';
+let bestSel='';
+function renderBests(){
+  const box=$('bestBox'),rows=famRows.map(r=>({name:r.name,color:r.color,isMe:r.isMe,g:r.isMe?goalStats():parseBests(r.gb)}));
+  const keys=new Map();rows.forEach(r=>r.g.forEach((_,k)=>keys.set(k,(keys.get(k)||0)+1)));
+  if(!keys.size||S.settings.mode!=='together'||!db){box.hidden=true;return}
+  const st=S.settings,mine=st.goalKind==='time'?'time'+st.goalMin:st.goalKind==='dist'?'dist'+st.goalMi:'';
+  if(!keys.has(bestSel))bestSel=keys.has(mine)?mine:[...keys].sort((a,b)=>b[1]-a[1])[0][0];
+  const seg=$('bestSeg');seg.textContent='';
+  [...keys.keys()].sort((a,b)=>a.slice(0,4).localeCompare(b.slice(0,4))||parseFloat(a.slice(4))-parseFloat(b.slice(4))).forEach(k=>{
+    const b=document.createElement('button');b.type='button';b.textContent=goalKeyName(k);b.setAttribute('aria-pressed',k===bestSel);b.onclick=()=>{bestSel=k;renderBests()};seg.append(b)});
+  seg.hidden=keys.size<2;
+  const time=bestSel.startsWith('time'),v=bestSel.slice(4),fmt=x=>time?fmt2(x)+' mi':fmtDur(x);
+  $('bestH').textContent='Best';
+  $('bestNote').textContent=time?'Most miles in a '+v+'-minute ride (set Ride goal to Time, '+v+' min).':'Fastest '+v+'-mile ride (set Ride goal to Distance, '+v+' mi).';
+  const L=rows.filter(r=>r.g.has(bestSel)).map(r=>({...r,s:r.g.get(bestSel)})).sort((a,b)=>time?b.s.best-a.s.best:a.s.best-b.s.best);
+  const body=$('bestBody');body.textContent='';
+  L.forEach((r,i)=>{const tr=document.createElement('tr');if(r.isMe)tr.className='me';
+    const td0=document.createElement('td'),dot=document.createElement('span');dot.className='dot';dot.style.background=r.color;td0.append(dot,document.createTextNode(r.name));tr.append(td0);
+    [fmt(r.s.best),fmt(r.s.last),String(r.s.n)].forEach((x,j)=>{const td=document.createElement('td');td.textContent=x;if(j===0&&i===0&&L.length>1)td.className='best';tr.append(td)});body.append(tr)});
+  box.hidden=false}
+
 /* ---------- ending a ride ---------- */
 // Saves, turns the sensor off (no reconnect loop), stops the alerts and the video, and shows a short summary.
 function endRide(){
-  const mi=live.sesMi,sec=live.sesSec,ft=S.settings.ft,rec=live.ended?null:sesRecord();
+  const mi=live.sesMi,sec=live.sesSec,ft=S.settings.ft,rec=live.ended?null:sesRecord();live.pausedAt=Date.now();live.lastRec=rec;
   live.ended=true;live.rpm=0;live.belowSince=live.stoppedSince=null;
   if(live.sim){$('simOn').checked=false;setSim(false)}
   btStop=true;if(btDev&&btDev.gatt.connected){try{btDev.gatt.disconnect()}catch(e){}}
@@ -581,13 +618,18 @@ function endRide(){
   parts.push(mi>0.005?'Nice ride! This session: '+(mi<1?fmt2(mi):fmt1(mi))+' mi in '+(sec<60?Math.round(sec)+' sec':m>=60?Math.floor(m/60)+' hr '+(m%60)+' min':m+' min')+(sec>30?' (average '+Math.round(mi*5280/ft/(sec/60))+' RPM, '+fmt1(mi/(sec/3600))+' mph, about '+Math.round(live.sesCal)+' calories)':'')+'.':'Ride paused.');
   parts.push('Today: '+fmt1(today().mi)+' mi'+(today().kcal>=1?', about '+Math.round(today().kcal)+' calories':'')+'.');
   const J=jInfo();if(J)parts.push(J.arrived?'You finished '+J.label+'.':'You\'re at mile '+fmt1(J.trip)+' of '+J.label+', '+fmt1(J.D-J.prog)+' mi to go. You\'ll pick up right there next time.');
-  parts.push('The sensor is off and alerts are stopped.');
+  parts.push('The sensor is off and alerts are stopped.'+(rec?' Resume within 5 minutes to keep going on this same ride.':''));
   $('rideDoneTxt').textContent=parts.join(' ');$('rideGoal').textContent=goalVerdict(rec);
   const hb=$('rideHist');hb.textContent='';
   if(S.sessions.length>1||rec){const n=document.createElement('div');n.className='note';n.style.marginTop='8px';n.textContent=sesTrend();sesTable(hb,8,rec);if(n.textContent)hb.prepend(n)}
-  renderSessions();$('rideDone').hidden=false;
+  renderSessions();renderBests();$('rideDone').hidden=false;
 }
-function resumeRide(){if(!live.ended)return;live.ended=false;sesReset();live.pedaledOnce=false;live.stoppedSince=live.belowSince=null;$('rideDone').hidden=true}
+// Resuming within 5 minutes of pausing carries on with the same ride (its time, miles and goal) instead of starting a new one.
+const RESUME_MS=5*60000;
+function resumeRide(){if(!live.ended)return;live.ended=false;
+  const r=live.lastRec,again=r&&Date.now()-live.pausedAt<=RESUME_MS&&S.sessions[S.sessions.length-1]===r;
+  if(again){S.sessions.pop();dirty=true;renderSessions()}else sesReset();
+  live.lastRec=null;live.pedaledOnce=false;live.stoppedSince=live.belowSince=null;$('rideDone').hidden=true}
 
 /* ---------- 1-second tick ---------- */
 let lastTick=performance.now();
@@ -1105,7 +1147,7 @@ function renderChart(){
 /* ---------- family (shared db) ---------- */
 function myRiderDoc(){
   const J=jInfo(),mc=myChal();
-  return {nick:S.settings.nick.trim(),totalMi:Math.round(S.totalMi*10)/10,weekMi:Math.round(weekMi()*10)/10,weekKey:dayKey(weekStart()),todayMi:Math.round(today().mi*10)/10,dayKey:dayKey(),jA:J?J.a.n:'',jB:J?J.b.n:'',jRoute:J&&J.scenic?J.r.id:'',jProg:J?Math.round(J.prog*10)/10:0,cId:mc?chal.id:'',cMi:mc?Math.round(chalMi(chal)*10)/10:0,cDone:mc?mc.done||0:0,updatedAt:Date.now()};
+  return {nick:S.settings.nick.trim(),totalMi:Math.round(S.totalMi*10)/10,weekMi:Math.round(weekMi()*10)/10,weekKey:dayKey(weekStart()),todayMi:Math.round(today().mi*10)/10,dayKey:dayKey(),jA:J?J.a.n:'',jB:J?J.b.n:'',jRoute:J&&J.scenic?J.r.id:'',jProg:J?Math.round(J.prog*10)/10:0,cId:mc?chal.id:'',cMi:mc?Math.round(chalMi(chal)*10)/10:0,cDone:mc?mc.done||0:0,gb:goalBests(),updatedAt:Date.now()};
 }
 let riderUnsub=null,lastRiderJson='';
 async function pushRider(){
@@ -1129,8 +1171,8 @@ const OTHER_COLORS=['var(--other)','#c2410c','#7c3aed','#0e7490','#a16207'];
 async function renderFamily(){
   const tog=S.settings.mode==='together';
   $('sFam').value=famCode();
-  if(!db){$('famNote').textContent=cloudErr||(tog?'To see each other, add the same family code below on each computer.':'Your stats stay private. To ride together, add a family code below and switch to Ride together.');$('famTable').hidden=true;famRows=[];renderChal(true);return}
-  if(!tog){$('famNote').textContent='Your stats stay private. Switch to Ride together to share your miles and see everyone on the map.';$('famTable').hidden=true;renderChal(true);return}
+  if(!db){$('famNote').textContent=cloudErr||(tog?'To see each other, add the same family code below on each computer.':'Your stats stay private. To ride together, add a family code below and switch to Ride together.');$('famTable').hidden=true;famRows=[];renderChal(true);$('bestBox').hidden=true;return}
+  if(!tog){$('famNote').textContent='Your stats stay private. Switch to Ride together to share your miles and see everyone on the map.';$('famTable').hidden=true;renderChal(true);$('bestBox').hidden=true;return}
   const others=riders.filter(r=>r.id!==uid);
   $('famNote').textContent=others.length?'Everyone who chose Ride together shows up here and on the map.':'Sharing on. When someone else adds this family code and picks Ride together, they\'ll appear here.';
   const ids=riders.map(r=>r.id);let ps={};try{if(userCap&&ids.length)ps=await userCap.profiles(ids)}catch(e){}
@@ -1144,7 +1186,7 @@ async function renderFamily(){
     const td0=document.createElement('td');const dot=document.createElement('span');dot.className='dot';dot.style.background=r.color;td0.append(dot,document.createTextNode(r.name));tr.append(td0);
     [fmt1(r.day),fmt1(r.week),comma(r.total)].forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.append(td)});body.append(tr)});
   $('famTable').hidden=!rows.length;
-  famRows=rows;renderOthers();renderChal(true);
+  famRows=rows;renderOthers();renderChal(true);renderBests();
 }
 let famRows=[];
 function renderOthers(){

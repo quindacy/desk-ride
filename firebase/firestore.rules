@@ -11,13 +11,14 @@ service cloud.firestore {
       function str(v, n) { return v is string && v.size() <= n; }
       function num(v) { return (v is int || v is float) && v >= 0 && v < 10000000; }
       function valid(d) {
-        return d.keys().hasOnly(['nick','totalMi','weekMi','weekKey','todayMi','dayKey','jA','jB','jRoute','jProg','jFrom','cId','cMi','cDone','updatedAt'])
+        return d.keys().hasOnly(['nick','totalMi','weekMi','weekKey','todayMi','dayKey','jA','jB','jRoute','jProg','jFrom','cId','cMi','cDone','gb','updatedAt'])
           && str(d.nick, 24) && num(d.totalMi) && num(d.weekMi) && num(d.todayMi)
           && str(d.weekKey, 12) && str(d.dayKey, 12)
           && str(d.jA, 80) && str(d.jB, 80) && str(d.jRoute, 40) && num(d.jProg)
           && (!('jFrom' in d) || num(d.jFrom)) && d.updatedAt is int
           && (!('cId' in d) || str(d.cId, 24)) && (!('cMi' in d) || num(d.cMi))
-          && (!('cDone' in d) || (d.cDone is int && d.cDone >= 0));
+          && (!('cDone' in d) || (d.cDone is int && d.cDone >= 0))
+          && (!('gb' in d) || str(d.gb, 600));
       }
       allow get, list: if okFam(fam);
       allow create, update: if okFam(fam) && okRider(rider) && valid(request.resource.data);
